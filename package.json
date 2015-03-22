@@ -4,18 +4,16 @@
   "description": "pong spinoff",
   "main": "index.js",
   "scripts": {
-      "start": "beefy index.js:bundle.js"
+    "start": "beefy index.js:bundle.js"
   },
   "dependencies": {
     "crtrdg-arrows": "~0.0.2",
-    "raphael": "~2.1.4",
-    "point-in-polygon": "0.0.0"
+    "point-in-polygon": "0.0.0",
+    "crtrdg-gameloop": "^0.2.2",
+    "vec2": "^1.6.0"
   },
   "devDependencies": {
     "beefy": "~2.1.3"
-  },
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
   "license": "ISC"
