@@ -62,6 +62,9 @@ function resetBallPosition() {
     ball.attr('cy', ball.attr('cy') + p.y)
 }
 
+function deg2rad(deg) {
+    return deg * (Math.PI / 180)
+}
 
 function printVector(v) {
     var p = v.toJSON()
@@ -70,7 +73,7 @@ function printVector(v) {
 }
 
 function checkBallCollision(cx, cy, x, y, width, height, deg) {
-    var degRad =  deg * (Math.PI / 180)
+    var degRad =  deg2rad(deg)
     
     var ballVector = Vec2([cx, cy]).add( Vec2([ballRadius, 0]).rotate(ballDirection * (Math.PI / 180)) )
     
@@ -126,9 +129,9 @@ function gameloop() {
 // player
   if(arrows.isDown('left')) playerDegree += 2
   if(arrows.isDown('right')) playerDegree -= 2
-  player.transform('r' + playerDegree)
   playerDegree = playerDegree % 360
   setPlayerPosition(playerDegree)
+  player.transform('r' + playerDegree)
 // ball
   checkBallCollision(
       ball.attr('cx'),
