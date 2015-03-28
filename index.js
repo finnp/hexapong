@@ -5,7 +5,57 @@ var Vec2 = require('vec2')
 var insidePolygon = require('point-in-polygon')
 var Color = require('color')
 
-var radius = 150
+
+function Hexagon(x, y, radius) {
+    this.baseColor = Color('#B84848')
+    this.color = this.baseColor
+    this.hitTime = 0 // for blinking
+    this.polygon = []
+    this.radius = radius
+    this.x = x
+    this.y = y
+    for(var i = 0; i < 6; i++)
+        this.polygon.push([this.radius * Math.cos(i * 1/3 * Math.PI) + x, this.radius * Math.sin(i * 1/3 * Math.PI) + y])
+}
+
+Hexagon.prototype.update = function() {
+    this.hitTime--
+    if(this.hitTime === 0) {
+        this.color = this.baseColor
+    }
+}
+
+Hexagon.prototype.draw = function(c) {
+    c.beginPath()
+    drawPolygon(c, hexagon.polygon)
+    c.strokeStyle = this.color.rgbString()
+    c.lineWidth = 5
+    c.stroke()
+    c.closePath()
+}
+
+function Circle(x, y) {
+    this.x = x || 200
+    this.y = y || 200
+    this.radius = 150
+    this.color = Color('#aaa')
+}
+
+Circle.prototype.draw = function(c) {
+    c.beginPath()
+    c.arc(this.x, this.y, this.radius, 0, 2 * Math.PI, false)
+    c.lineWidth = 2
+    c.strokeStyle = this.color.rgbString()
+    c.stroke()
+    c.closePath()
+}
+
+Circle.prototype.getCoordinates = function(deg) {
+  var q = {}
+  q.x = this.x + this.radius * Math.cos(deg * (Math.PI / 180))
+  q.y = this.y + this.radius * Math.sin(deg * (Math.PI / 180))
+  return q
+}
 
 function Player() {
     this.width = 4
@@ -14,6 +64,7 @@ function Player() {
     this.color = Color('#ff0000')
     this.id = 1
     this.score = 0
+    this.bot = false
 }
 Player.prototype.collide = function() {
     // ball
@@ -22,12 +73,33 @@ Player.prototype.collide = function() {
     })
     this.active = false
 }
-Player.prototype.update = function() {
-  if(this.arrows.isDown('left')) this.angle += 2
-  if(this.arrows.isDown('right')) this.angle -= 2
+Player.prototype.update = function(circle, ball) {
+  if(this.bot){
+    if(this.active) {
+         var l = circle.getCoordinates(this.angle-2)
+        var m = circle.getCoordinates(this.angle)
+        var r = circle.getCoordinates(this.angle+2)
+        if( distance(l, ball) > distance(m, ball) ){
+             if( distance(r, ball) < distance(m, ball) ){
+                this.angle = this.angle+2
+             }
+        }else{
+            if(distance(l, ball) >= distance(r, ball)){
+                this.angle = this.angle+2
+            }else{
+                this.angle = this.angle-2
+            }
+        }   
+    }
+  }else{
+    if(this.arrows.isDown('left')) this.angle += 2
+    if(this.arrows.isDown('right')) this.angle -= 2
+  }
+  
   this.angle = this.angle % 360
+
   // update .x and .y
-  var p = getCircleCoordinates(200, 200, radius, this.angle)
+  var p = circle.getCoordinates(this.angle)
   this.x =  p.x - (player.width/2)
   this.y =  p.y - (player.height/2)
 }
@@ -38,30 +110,44 @@ Player.prototype.draw = function(c) {
     c.rotate(deg2rad(this.angle))
     c.rect(- (this.width/2), - (this.height/2),  this.width , this.height)
     var color = this.color.clone()
-    if(!this.active) color.alpha(0.25)
+    // if(!this.active) color.alpha(0.25)
+    if(!this.active) color = this.inactiveColor 
     c.fillStyle = color.rgbString()
     c.fill()
     c.restore()
     c.closePath()
     c.fillStyle = this.color.rgbString()
-    c.font = '48px serif'
+    c.font = "48px 'Open Sans', sans-serif" //'48px Verdana, Geneva, sans-serif'
     c.fillText(this.score, 400, 150 + this.id * 100)
 }
 
 function Ball() {
-    this.reset()
     this.radius = 2
-
+    this.startPoint = {x: 0, y: 0}
+    this.color = Color('#fff')
+    this.reset()
 }
 Ball.prototype.reset = function() {
-    this.x = 200
-    this.y = 200
+    this.x = this.startPoint.x
+    this.y = this.startPoint.y
+    this.speed = 2
     this.direction = Math.random()*360
 }
 Ball.prototype.update = function() {
-    var p = getCircleCoordinates(0, 0, 1, this.direction)
+    var p = this.moveVector(this.direction)
     this.x += p.x 
     this.y += p.y
+}
+Ball.prototype.moveVector = function(deg) {
+  var q = {}
+  q.x = this.speed * Math.cos(deg * (Math.PI / 180))
+  q.y = this.speed * Math.sin(deg * (Math.PI / 180))
+  return q
+}
+Ball.prototype.moveBack = function() {
+    var p = this.moveVector(this.direction)
+    this.x -= p.x
+    this.y -= p.y
 }
 Ball.prototype.checkPlayerCollision = function (player) {
     var cx = this.x 
@@ -91,44 +177,50 @@ Ball.prototype.checkPlayerCollision = function (player) {
     
     if(player.active && insidePolygon(ballVector.toArray(), playerVertices)) {
         player.collide()
-        resetBallPosition()
+        this.color = player.color
+        this.moveBack()
         this.direction = 180 - this.direction + 2* player.angle
         this.direction = this.direction % 360
     }
 }
 
-Ball.prototype.checkWallCollision = function (){
+Ball.prototype.checkWallCollision = function (hexagon){
     
     var cx = this.x 
     var cy = this.y
     var angle =  3
+    var polygon = hexagon.polygon
     
     var ballVector = Vec2([cx, cy]).add( Vec2([this.radius, 0]).rotate(this.direction * (Math.PI / 180)) )
     
-    if(!insidePolygon(ballVector.toArray(), hexagon)) {
-        resetBallPosition()
+    if(!insidePolygon(ballVector.toArray(), polygon)) {
+        this.moveBack()
         
-        if(insidePolygon(ballVector.toArray(), [hexagon[0],  [hexagon[0][0],hexagon[1][1]], hexagon[1]])){
+        if(insidePolygon(ballVector.toArray(), [polygon[0],  [polygon[0][0],polygon[1][1]], polygon[1]])){
             angle = 30
         }
-        if(insidePolygon(ballVector.toArray(), [hexagon[1],  [hexagon[1][0],hexagon[1][1]+10], [hexagon[2][0],hexagon[2][1]+10], hexagon[2]])){
+        if(insidePolygon(ballVector.toArray(), [polygon[1],  [polygon[1][0],polygon[1][1]+10], [polygon[2][0],polygon[2][1]+10], polygon[2]])){
             angle = 90
         }
-        if(insidePolygon(ballVector.toArray(), [hexagon[2],  [hexagon[3][0],hexagon[2][1]], hexagon[3]])){
+        if(insidePolygon(ballVector.toArray(), [polygon[2],  [polygon[3][0],polygon[2][1]], polygon[3]])){
             angle = 150
         }
-        if(insidePolygon(ballVector.toArray(), [hexagon[3],  [hexagon[3][0],hexagon[4][1]], hexagon[4]])){
+        if(insidePolygon(ballVector.toArray(), [polygon[3],  [polygon[3][0],polygon[4][1]], polygon[4]])){
             angle = 210
         }
-        if(insidePolygon(ballVector.toArray(), [hexagon[4],  [hexagon[4][0],hexagon[4][1]-10], [hexagon[5][0],hexagon[5][1]-10], hexagon[5]])){
+        if(insidePolygon(ballVector.toArray(), [polygon[4],  [polygon[4][0],polygon[4][1]-10], [polygon[5][0],polygon[5][1]-10], polygon[5]])){
             angle = 270
         }
-        if(insidePolygon(ballVector.toArray(), [hexagon[5],  [hexagon[0][0],hexagon[5][1]], hexagon[0]])){
+        if(insidePolygon(ballVector.toArray(), [polygon[5],  [polygon[0][0],polygon[5][1]], polygon[0]])){
             angle = 330
         }
         
         players.forEach(function(player) {
-            if(!player.active) player.score++
+            if(!player.active) {
+                player.score++
+                hexagon.color = player.inactiveColor.clone()
+                hexagon.hitTime = 15
+            }
         })
         
         this.direction = 180 - this.direction + 2*angle
@@ -140,28 +232,36 @@ Ball.prototype.draw = function(c) {
     c.save()
     c.beginPath()
     c.arc(this.x, this.y, this.radius, 0, 2 * Math.PI, false)
-    c.fillStyle = '#000'
+    c.fillStyle = this.color.rgbString()
     c.fill()
     c.closePath()    
     c.restore()
 }
 
-var ball = new Ball()
 
-var game = new Game({width: 800, height: 600})
-var polygonRadius = 200
-var hexagon = createHexagon(200, 200, polygonRadius)
+var game = new Game()
+
+var circle = new Circle(game.width/2, game.height/2)
+var ball = new Ball()
+ball.startPoint.x = circle.x
+ball.startPoint.y = circle.y
+var hexagon = new Hexagon(circle.x, circle.y, 200)
 
 var player = new Player()
+//player.bot = true
 player.arrows = new Arrows()
 player.angle = 0 // degree
+player.color = Color('#550000')
+player.inactiveColor = Color('#801515')
 
 var player2 = new Player()
 player2.id = 2
-player2.arrows = new Arrows()
-player2.arrows.useWASD()
+player2.bot = true
+// player2.arrows = new Arrows()
+// player2.arrows.useWASD()
 player2.angle = 180
-player2.color = Color('#0000ff')
+player2.color = Color('#FFAAAA')
+player2.inactiveColor = Color('#D46A6A')
 
 var players = [player, player2]
 
@@ -171,67 +271,40 @@ function init() {
 }
 init()
 
-function createHexagon(x, y, r) {
-    var points = []
-    for(var i = 0; i < 6; i++)
-     points.push([r * Math.cos(i * 1/3 * Math.PI) + x, r * Math.sin(i * 1/3 * Math.PI) + y])
-    return points
-}
-
-function resetBallPosition() {
-    var p = getCircleCoordinates(0, 0, 2, (180 + ball.direction) % 360)
-    ball.x += p.x 
-    ball.y += p.y
+function distance(p1,p2){
+    return Math.sqrt(Math.pow((p1.x - p2.x), 2) + Math.pow((p1.y - p2.y), 2))
 }
 
 function deg2rad(deg) {
     return deg * (Math.PI / 180)
 }
 
-
-function getCircleCoordinates(x, y, r, deg) {
-  var q = {}
-  q.x = x + r * Math.cos(deg * (Math.PI / 180))
-  q.y = y + r * Math.sin(deg * (Math.PI / 180))
-  return q
-}
-
 function drawPolygon(c, polygon) {
+    c.beginPath()
     c.moveTo(polygon[0][0], polygon[0][1]) 
     for(var i = 1; i < polygon.length; i++) c.lineTo(polygon[i][0], polygon[i][1]) 
     c.lineTo(polygon[0][0], polygon[0][1])
+    c.closePath()
 }
 
 game.on('update', function() {
 // player
-    player.update()
-    player2.update()
+    player.update(circle, ball)
+    player2.update(circle, ball)
 // ball
    ball.checkPlayerCollision(player)
    ball.checkPlayerCollision(player2)
-   ball.checkWallCollision() 
+   ball.checkWallCollision(hexagon) 
    ball.update()
+// Hexagon
+   hexagon.update()
 })
 
 game.on('draw', function(c) {
-    // circle path 
-    c.beginPath()
-    c.arc(200, 200, radius, 0, 2 * Math.PI, false)
-    c.fillStyle = '#fff'
-    c.fill()
-    c.lineWidth = 2
-    c.strokeStyle = '#aaa'
-    c.stroke()
-    c.closePath()
 
+    //circle.draw(c)
     ball.draw(c)
     player.draw(c)
     player2.draw(c)
-
-    // hexagon
-    c.beginPath()
-    drawPolygon(c, hexagon)
-    c.strokeStyle = '#000'
-    c.stroke()
-    c.closePath()
+    hexagon.draw(c)
 })
