@@ -2,10 +2,63 @@
 // http://ufkkd63d4a84.flexi.koding.io:9966/
 var Game = require('crtrdg-gameloop')
 var Arrows = require('crtrdg-arrows')
+var Keyboard = require('crtrdg-keyboard')
 var Vec2 = require('vec2')
 var insidePolygon = require('point-in-polygon')
 var Color = require('color')
+var play = require('play-audio')
 
+// var sounds = [
+//     play('sound.wav').preload(),
+//     play('sound.wav').preload(),
+//     play('sound.wav').preload(),
+//     play('sound.wav').preload(),
+//     play('sound.wav').preload()
+// ]
+
+// var soundI = 0
+function hitSound() {
+    // sounds[soundI++].play()
+    // soundI = soundI % sounds.length
+}
+
+
+function Menu(game, x, y){
+    this.items = ['1 Player', '2 Player']
+    this.selected = 0
+    this.color = Color('#550000')
+    this.selectedColor = Color('#FFAAAA')
+    this.x = x
+    this.y = y
+    this.frame = 0
+    this.game = game
+}
+Menu.prototype.update = function() {
+    this.frame++
+    if (this.frame >= 100) this.frame = 0
+}
+Menu.prototype.draw = function(c) {
+    this.items.forEach(function(item, i) {
+        c.fillStyle = (i === this.selected ? this.selectedColor : this.color).rgbString()
+        var size = i === this.selected ? (Math.sin(this.frame * (Math.PI / 50)) - 0.5) * 3 + 48 : 48
+        c.font = size + "px 'Open Sans', sans-serif"
+        var text = c.measureText(item)
+        c.fillText(item, this.x - text.width / 2, this.y + i * 80 - 20)
+    }.bind(this))
+}
+Menu.prototype.up = function() {
+    this.selected--
+    if(this.selected < 0) this.selected = this.items.length - 1
+}
+Menu.prototype.down = function() {
+    this.selected++
+    if(this.selected > this.items.length - 1) this.selected = 0
+}
+Menu.prototype.select = function() {
+    this.game.state = "playing"
+    init(this.selected + 1)
+
+}
 
 function Hexagon(x, y, radius) {
     this.baseColor = Color('#B84848')
@@ -64,8 +117,17 @@ function Player() {
     this.active = false
     this.color = Color('#ff0000')
     this.id = 1
-    this.score = 0
     this.bot = false
+    this.init()
+}
+Player.prototype.init = function() {
+    this.score = 0
+    this.active = false
+    this.bot = false
+    this.hideScore = false
+}
+Player.prototype.setBot = function() {
+    this.bot = true
 }
 Player.prototype.collide = function() {
     // ball
@@ -76,19 +138,20 @@ Player.prototype.collide = function() {
 }
 Player.prototype.update = function(circle, ball) {
   if(this.bot){
+    var botSpeed = 1.8
     if(this.active) {
-         var l = circle.getCoordinates(this.angle-2)
+         var l = circle.getCoordinates(this.angle-botSpeed)
         var m = circle.getCoordinates(this.angle)
-        var r = circle.getCoordinates(this.angle+2)
+        var r = circle.getCoordinates(this.angle+botSpeed)
         if( distance(l, ball) > distance(m, ball) ){
              if( distance(r, ball) < distance(m, ball) ){
-                this.angle = this.angle+2
+                this.angle = this.angle+botSpeed
              }
         }else{
             if(distance(l, ball) >= distance(r, ball)){
-                this.angle = this.angle+2
+                this.angle = this.angle+botSpeed
             }else{
-                this.angle = this.angle-2
+                this.angle = this.angle-botSpeed
             }
         }   
     }
@@ -117,9 +180,12 @@ Player.prototype.draw = function(c) {
     c.fill()
     c.restore()
     c.closePath()
-    c.fillStyle = this.color.rgbString()
-    c.font = "48px 'Open Sans', sans-serif" //'48px Verdana, Geneva, sans-serif'
-    c.fillText(this.score, 400, 150 + this.id * 100)
+    // score
+    if(!this.hideScore) {
+        c.fillStyle = this.color.rgbString()
+        c.font = "48px 'Open Sans', sans-serif" //'48px Verdana, Geneva, sans-serif'
+        c.fillText(this.score, 400, 150 + this.id * 100)   
+    }
 }
 
 function Ball() {
@@ -178,6 +244,7 @@ Ball.prototype.checkPlayerCollision = function (player) {
     
     if(player.active && insidePolygon(ballVector.toArray(), playerVertices)) {
         player.collide()
+        hitSound()
         this.color = player.color
         this.moveBack()
         this.direction = 180 - this.direction + 2* player.angle
@@ -196,6 +263,7 @@ Ball.prototype.checkWallCollision = function (hexagon){
     
     if(!insidePolygon(ballVector.toArray(), polygon)) {
         this.moveBack()
+        hitSound()
         
         if(insidePolygon(ballVector.toArray(), [polygon[0],  [polygon[0][0],polygon[1][1]], polygon[1]])){
             angle = 30
@@ -239,8 +307,11 @@ Ball.prototype.draw = function(c) {
     c.restore()
 }
 
-
 var game = new Game()
+
+
+var player = new Player() 
+var player2 = new Player()
 
 var circle = new Circle(game.width/2, game.height/2)
 var ball = new Ball()
@@ -248,29 +319,58 @@ ball.startPoint.x = circle.x
 ball.startPoint.y = circle.y
 var hexagon = new Hexagon(circle.x, circle.y, 200)
 
-var player = new Player()
-//player.bot = true
-player.arrows = new Arrows()
-player.angle = 0 // degree
-player.color = Color('#550000')
-player.inactiveColor = Color('#801515')
+var menu = new Menu(game, circle.x, circle.y)
 
-var player2 = new Player()
-player2.id = 2
-player2.bot = true
-// player2.arrows = new Arrows()
-// player2.arrows.useWASD()
-player2.angle = 180
-player2.color = Color('#FFAAAA')
-player2.inactiveColor = Color('#D46A6A')
+var primaryArrows = new Arrows()
+
+primaryArrows.on('down', function () {
+    if(game.state === 'menu') menu.down()
+})
+
+primaryArrows.on('up', function() {
+    if(game.state === 'menu') menu.up()
+})
+
+primaryArrows.on('right', function() {
+    
+})
+
+var keyboard = new Keyboard()
+
+keyboard.on('keydown', function (key) {
+    if(key === '<enter>' && game.state === 'menu') menu.select()
+})
 
 var players = [player, player2]
 
-function init() {
+function init(players) {
+    player.init()
+    player.arrows = primaryArrows
+    player.angle = 0 // degree
+    player.color = Color('#550000')
+    player.inactiveColor = Color('#801515')
+
+    player2.init()
+    player2.id = 2
+    player2.angle = 180
+    player2.color = Color('#FFAAAA')
+    player2.inactiveColor = Color('#D46A6A')
+    player2.arrows = new Arrows()
+    player2.arrows.useWASD()
+
+    if(players === 0) {
+        player.setBot()
+        player.hideScore = true
+        player2.hideScore = true
+    }
+    if(players < 2) {
+        player2.setBot()
+    }
+
     ball.reset()
-    players[Math.round(Math.random())].active = true
+    player2.active = true
 }
-init()
+init(0)
 
 function distance(p1,p2){
     return Math.sqrt(Math.pow((p1.x - p2.x), 2) + Math.pow((p1.y - p2.y), 2))
@@ -278,6 +378,11 @@ function distance(p1,p2){
 
 function deg2rad(deg) {
     return deg * (Math.PI / 180)
+}
+
+function checkWinning(player, player2) {
+    if(player.score === 10) game.state = 'gameover'
+    if(player2.score === 10) game.state = 'gameover'
 }
 
 function drawPolygon(c, polygon) {
@@ -288,8 +393,10 @@ function drawPolygon(c, polygon) {
     c.closePath()
 }
 
+game.state = 'menu' // 'menu', 'playing', 'gameover'
+
 game.on('update', function() {
-// player
+ // player
     player.update(circle, ball)
     player2.update(circle, ball)
 // ball
@@ -297,20 +404,39 @@ game.on('update', function() {
    ball.checkPlayerCollision(player2)
    ball.checkWallCollision(hexagon) 
    ball.update()
+if(game.state === 'playing') {
+   checkWinning(player, player2)
+}
 // Hexagon
    hexagon.update()
+   menu.update()
 })
 
 game.on('draw', function(c) {
 
     //circle.draw(c)
-    ball.draw(c)
-    player.draw(c)
-    player2.draw(c)
+    // if(game.state !== 'menu') {
+        ball.draw(c)
+        player.draw(c)
+        player2.draw(c)
+    // }
     hexagon.draw(c)
+    if(game.state === 'menu') {
+        menu.draw(c)
+    }
+    if(game.state === 'gameover') {
+        if(player.score > player2.score) {
+            alert('Dark player wins')
+            game.state = 'menu'
+        } else {
+            alert('Light player wins')
+            game.state = 'menu'
+        }
+        init(0)
+    }
 })
 
-},{"color":2,"crtrdg-arrows":7,"crtrdg-gameloop":9,"point-in-polygon":14,"vec2":15}],2:[function(require,module,exports){
+},{"color":2,"crtrdg-arrows":7,"crtrdg-gameloop":9,"crtrdg-keyboard":14,"play-audio":17,"point-in-polygon":26,"vec2":27}],2:[function(require,module,exports){
 /* MIT license */
 var convert = require("color-convert"),
     string = require("color-string");
@@ -1991,7 +2117,7 @@ Arrows.prototype.useWASD = function () {
   this.setArrowKeyCodes(65, 68, 87, 83);
 }
 
-},{"events":16,"inherits":8}],8:[function(require,module,exports){
+},{"events":28,"inherits":8}],8:[function(require,module,exports){
 if (typeof Object.create === 'function') {
   // implementation from standard node.js 'util' module
   module.exports = function inherits(ctor, superCtor) {
@@ -2108,7 +2234,7 @@ Game.prototype.drawAllLayers = function(){
     this.emit('draw', this.context);
   }
 }
-},{"events":16,"inherits":10,"raf-stream":11,"util":20}],10:[function(require,module,exports){
+},{"events":28,"inherits":10,"raf-stream":11,"util":32}],10:[function(require,module,exports){
 arguments[4][8][0].apply(exports,arguments)
 },{"dup":8}],11:[function(require,module,exports){
 var EE = require('events').EventEmitter
@@ -2161,7 +2287,7 @@ module.exports = function(el, tick) {
   }
 }
 
-},{"events":16,"raf":12}],12:[function(require,module,exports){
+},{"events":28,"raf":12}],12:[function(require,module,exports){
 var now = require('performance-now')
   , global = typeof window === 'undefined' ? {} : window
   , vendors = ['ms', 'moz', 'webkit', 'o']
@@ -2268,7 +2394,473 @@ module.exports.cancel = function() {
 */
 
 }).call(this,require('_process'))
-},{"_process":18}],14:[function(require,module,exports){
+},{"_process":30}],14:[function(require,module,exports){
+var EventEmitter = require('events').EventEmitter;
+var inherits = require('inherits');
+var vkey = require('vkey');
+
+module.exports = Keyboard;
+inherits(Keyboard, EventEmitter);
+
+function Keyboard(game){
+  this.game = game || {};
+  this.keysDown = {};
+  this.initializeListeners();
+}
+
+Keyboard.prototype.initializeListeners = function(){
+  var self = this;
+
+  document.addEventListener('keydown', function(e){
+    self.emit('keydown', vkey[e.keyCode]);
+    self.keysDown[vkey[e.keyCode]] = true;
+
+    if (e.keyCode === 40 || e.keyCode === 38 || e.keyCode === 37 || e.keyCode === 39 || e.keyCode === 32) {
+      e.preventDefault();
+    }
+  }, false);
+
+  document.addEventListener('keyup', function(e){
+    self.emit('keyup', vkey[e.keyCode]);
+    delete self.keysDown[vkey[e.keyCode]];
+  }, false);
+};
+},{"events":28,"inherits":15,"vkey":16}],15:[function(require,module,exports){
+arguments[4][8][0].apply(exports,arguments)
+},{"dup":8}],16:[function(require,module,exports){
+var ua = typeof window !== 'undefined' ? window.navigator.userAgent : ''
+  , isOSX = /OS X/.test(ua)
+  , isOpera = /Opera/.test(ua)
+  , maybeFirefox = !/like Gecko/.test(ua) && !isOpera
+
+var i, output = module.exports = {
+  0:  isOSX ? '<menu>' : '<UNK>'
+, 1:  '<mouse 1>'
+, 2:  '<mouse 2>'
+, 3:  '<break>'
+, 4:  '<mouse 3>'
+, 5:  '<mouse 4>'
+, 6:  '<mouse 5>'
+, 8:  '<backspace>'
+, 9:  '<tab>'
+, 12: '<clear>'
+, 13: '<enter>'
+, 16: '<shift>'
+, 17: '<control>'
+, 18: '<alt>'
+, 19: '<pause>'
+, 20: '<caps-lock>'
+, 21: '<ime-hangul>'
+, 23: '<ime-junja>'
+, 24: '<ime-final>'
+, 25: '<ime-kanji>'
+, 27: '<escape>'
+, 28: '<ime-convert>'
+, 29: '<ime-nonconvert>'
+, 30: '<ime-accept>'
+, 31: '<ime-mode-change>'
+, 27: '<escape>'
+, 32: '<space>'
+, 33: '<page-up>'
+, 34: '<page-down>'
+, 35: '<end>'
+, 36: '<home>'
+, 37: '<left>'
+, 38: '<up>'
+, 39: '<right>'
+, 40: '<down>'
+, 41: '<select>'
+, 42: '<print>'
+, 43: '<execute>'
+, 44: '<snapshot>'
+, 45: '<insert>'
+, 46: '<delete>'
+, 47: '<help>'
+, 91: '<meta>'  // meta-left -- no one handles left and right properly, so we coerce into one.
+, 92: '<meta>'  // meta-right
+, 93: isOSX ? '<meta>' : '<menu>'      // chrome,opera,safari all report this for meta-right (osx mbp).
+, 95: '<sleep>'
+, 106: '<num-*>'
+, 107: '<num-+>'
+, 108: '<num-enter>'
+, 109: '<num-->'
+, 110: '<num-.>'
+, 111: '<num-/>'
+, 144: '<num-lock>'
+, 145: '<scroll-lock>'
+, 160: '<shift-left>'
+, 161: '<shift-right>'
+, 162: '<control-left>'
+, 163: '<control-right>'
+, 164: '<alt-left>'
+, 165: '<alt-right>'
+, 166: '<browser-back>'
+, 167: '<browser-forward>'
+, 168: '<browser-refresh>'
+, 169: '<browser-stop>'
+, 170: '<browser-search>'
+, 171: '<browser-favorites>'
+, 172: '<browser-home>'
+
+  // ff/osx reports '<volume-mute>' for '-'
+, 173: isOSX && maybeFirefox ? '-' : '<volume-mute>'
+, 174: '<volume-down>'
+, 175: '<volume-up>'
+, 176: '<next-track>'
+, 177: '<prev-track>'
+, 178: '<stop>'
+, 179: '<play-pause>'
+, 180: '<launch-mail>'
+, 181: '<launch-media-select>'
+, 182: '<launch-app 1>'
+, 183: '<launch-app 2>'
+, 186: ';'
+, 187: '='
+, 188: ','
+, 189: '-'
+, 190: '.'
+, 191: '/'
+, 192: '`'
+, 219: '['
+, 220: '\\'
+, 221: ']'
+, 222: "'"
+, 223: '<meta>'
+, 224: '<meta>'       // firefox reports meta here.
+, 226: '<alt-gr>'
+, 229: '<ime-process>'
+, 231: isOpera ? '`' : '<unicode>'
+, 246: '<attention>'
+, 247: '<crsel>'
+, 248: '<exsel>'
+, 249: '<erase-eof>'
+, 250: '<play>'
+, 251: '<zoom>'
+, 252: '<no-name>'
+, 253: '<pa-1>'
+, 254: '<clear>'
+}
+
+for(i = 58; i < 65; ++i) {
+  output[i] = String.fromCharCode(i)
+}
+
+// 0-9
+for(i = 48; i < 58; ++i) {
+  output[i] = (i - 48)+''
+}
+
+// A-Z
+for(i = 65; i < 91; ++i) {
+  output[i] = String.fromCharCode(i)
+}
+
+// num0-9
+for(i = 96; i < 107; ++i) {
+  output[i] = '<num-'+(i - 96)+'>'
+}
+
+// F1-F24
+for(i = 112; i < 136; ++i) {
+  output[i] = 'F'+(i-111)
+}
+
+},{}],17:[function(require,module,exports){
+module.exports = require('media').audio;
+
+},{"media":18}],18:[function(require,module,exports){
+module.exports = require('./lib/player');
+module.exports.audio = media('audio');
+module.exports.video = media('video');
+
+function media (kind) {
+  return function (urls, dom) {
+    return module.exports(kind, urls, dom);
+  };
+}
+
+},{"./lib/player":20}],19:[function(require,module,exports){
+var table = {
+  aif  : "audio/x-aiff",
+  aiff : "audio/x-aiff",
+  wav  : "audio/x-wav",
+  mp3  : 'audio/mpeg',
+  m3u  : "audio/x-mpegurl",
+  mid  : "audio/midi",
+  midi : "audio/midi",
+  m4a  : 'audio/m4a',
+  ogg  : 'audio/ogg',
+  mp4  : 'video/mp4',
+  ogv  : 'video/mp4',
+  webm : 'video/webm',
+  mkv  : 'video/x-matroska',
+  mpg  : 'video/mpeg'
+};
+
+module.exports = mimeOf;
+
+function mimeOf(url){
+  return table[ url.split('.').slice(-1)[0] ];
+}
+
+},{}],20:[function(require,module,exports){
+var newChain  = require('new-chain'),
+    src = require('./src'),
+    render = require('./render');
+
+module.exports = play;
+
+function play(media, urls, dom){
+  var el, chain, url;
+
+  dom || ( dom = document.documentElement );
+  el = render(media);
+  dom.appendChild(el);
+
+  chain = newChain({
+    autoplay: bool('autoplay'),
+    controls: bool('controls'),
+    load: method('load'),
+    loop: bool('loop'),
+    muted: bool('muted'),
+    on: on,
+    pause: method('pause'),
+    play: method('play'),
+    preload: bool('preload')
+  });
+
+  chain.currentTime = attr('currentTime');
+  chain.element = element;
+  chain.src = src.attr(el);
+  chain.volume = attr('volume');
+  chain.remove = remove;
+
+  chain.src(urls);
+
+  return chain;
+
+  function attr(name){
+    return function(value){
+      if ( arguments.length ) {
+        el[name] = value;
+        return chain;
+      }
+
+      return el[name];
+    };
+  }
+
+  function bool(name){
+    return function(value){
+      if (value === false) {
+        return el[name] = false;
+      }
+
+      return el[name] = true;
+    };
+  }
+
+  function element(){
+    return el;
+  }
+
+  function on(event, callback){
+    el.addEventListener(event, callback, false);
+  }
+
+  function method(name){
+    return function(){
+      return el[name].apply(el, arguments);
+    };
+  }
+
+  function remove(){
+    return el.parentNode.removeChild(el);
+  }
+
+}
+
+},{"./render":21,"./src":22,"new-chain":25}],21:[function(require,module,exports){
+var domify = require('domify'),
+    templates = require("./templates");
+
+module.exports = render;
+
+function render(media){
+  return domify(templates[media + '.html']);
+}
+
+},{"./templates":23,"domify":24}],22:[function(require,module,exports){
+var mimeOf = require("./mime");
+
+module.exports = {
+  attr: attr,
+  pick: pick
+};
+
+function attr(el){
+  var value;
+
+  return function(urls){
+    if (arguments.length) {
+      value = urls;
+      el.setAttribute('src', pick(el, value));
+    }
+
+    return value;
+  };
+}
+
+function pick(el, urls){
+  if(!urls) return;
+
+  if(typeof urls == 'string'){
+    return urls;
+  }
+
+  var canPlay = urls.filter(function (url) {
+    return !!el.canPlayType(url.mime || mimeOf(url.type || url));
+  });
+
+  if (canPlay.length == 0) return;
+
+  return canPlay[0].url || canPlay[0];
+}
+
+},{"./mime":19}],23:[function(require,module,exports){
+exports["audio.html"] = "<audio preload=\"auto\" /></audio>"
+exports["video.html"] = "<video preload=\"auto\" /></video>"
+},{}],24:[function(require,module,exports){
+
+/**
+ * Expose `parse`.
+ */
+
+module.exports = parse;
+
+/**
+ * Wrap map from jquery.
+ */
+
+var map = {
+  option: [1, '<select multiple="multiple">', '</select>'],
+  optgroup: [1, '<select multiple="multiple">', '</select>'],
+  legend: [1, '<fieldset>', '</fieldset>'],
+  thead: [1, '<table>', '</table>'],
+  tbody: [1, '<table>', '</table>'],
+  tfoot: [1, '<table>', '</table>'],
+  colgroup: [1, '<table>', '</table>'],
+  caption: [1, '<table>', '</table>'],
+  tr: [2, '<table><tbody>', '</tbody></table>'],
+  td: [3, '<table><tbody><tr>', '</tr></tbody></table>'],
+  th: [3, '<table><tbody><tr>', '</tr></tbody></table>'],
+  col: [2, '<table><tbody></tbody><colgroup>', '</colgroup></table>'],
+  _default: [0, '', '']
+};
+
+/**
+ * Parse `html` and return the children.
+ *
+ * @param {String} html
+ * @return {Array}
+ * @api private
+ */
+
+function parse(html) {
+  if ('string' != typeof html) throw new TypeError('String expected');
+
+  // tag name
+  var m = /<([\w:]+)/.exec(html);
+  if (!m) throw new Error('No elements were generated.');
+  var tag = m[1];
+
+  // body support
+  if (tag == 'body') {
+    var el = document.createElement('html');
+    el.innerHTML = html;
+    return el.removeChild(el.lastChild);
+  }
+
+  // wrap map
+  var wrap = map[tag] || map._default;
+  var depth = wrap[0];
+  var prefix = wrap[1];
+  var suffix = wrap[2];
+  var el = document.createElement('div');
+  el.innerHTML = prefix + html + suffix;
+  while (depth--) el = el.lastChild;
+
+  var els = el.children;
+  if (1 == els.length) {
+    return el.removeChild(els[0]);
+  }
+
+  var fragment = document.createDocumentFragment();
+  while (els.length) {
+    fragment.appendChild(el.removeChild(els[0]));
+  }
+
+  return fragment;
+}
+
+},{}],25:[function(require,module,exports){
+module.exports = newChain;
+module.exports.from = from;
+
+function from(chain){
+
+  return function(){
+    var m, i;
+
+    m = methods.apply(undefined, arguments);
+    i   = m.length;
+
+    while ( i -- ) {
+      chain[ m[i].name ] = m[i].fn;
+    }
+
+    m.forEach(function(method){
+      chain[ method.name ] = function(){
+        method.fn.apply(this, arguments);
+        return chain;
+      };
+    });
+
+    return chain;
+  };
+
+}
+
+function methods(){
+  var all, el, i, len, result, key;
+
+  all    = Array.prototype.slice.call(arguments);
+  result = [];
+  i      = all.length;
+
+  while ( i -- ) {
+    el = all[i];
+
+    if ( typeof el == 'function' ) {
+      result.push({ name: el.name, fn: el });
+      continue;
+    }
+
+    if ( typeof el != 'object' ) continue;
+
+    for ( key in el ) {
+      result.push({ name: key, fn: el[key] });
+    }
+  }
+
+  return result;
+}
+
+function newChain(){
+  return from({}).apply(undefined, arguments);
+}
+
+},{}],26:[function(require,module,exports){
 module.exports = function (point, vs) {
     // ray-casting algorithm based on
     // http://www.ecse.rpi.edu/Homepages/wrf/Research/Short_Notes/pnpoly.html
@@ -2288,7 +2880,7 @@ module.exports = function (point, vs) {
     return inside;
 };
 
-},{}],15:[function(require,module,exports){
+},{}],27:[function(require,module,exports){
 ;(function inject(clean, precision, undef) {
 
   var isArray = function (a) {
@@ -2763,7 +3355,7 @@ module.exports = function (point, vs) {
   return Vec2;
 })();
 
-},{}],16:[function(require,module,exports){
+},{}],28:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -3066,9 +3658,9 @@ function isUndefined(arg) {
   return arg === void 0;
 }
 
-},{}],17:[function(require,module,exports){
+},{}],29:[function(require,module,exports){
 arguments[4][8][0].apply(exports,arguments)
-},{"dup":8}],18:[function(require,module,exports){
+},{"dup":8}],30:[function(require,module,exports){
 // shim for using process in browser
 
 var process = module.exports = {};
@@ -3128,14 +3720,14 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-},{}],19:[function(require,module,exports){
+},{}],31:[function(require,module,exports){
 module.exports = function isBuffer(arg) {
   return arg && typeof arg === 'object'
     && typeof arg.copy === 'function'
     && typeof arg.fill === 'function'
     && typeof arg.readUInt8 === 'function';
 }
-},{}],20:[function(require,module,exports){
+},{}],32:[function(require,module,exports){
 (function (process,global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -3725,4 +4317,4 @@ function hasOwnProperty(obj, prop) {
 }
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./support/isBuffer":19,"_process":18,"inherits":17}]},{},[1]);
+},{"./support/isBuffer":31,"_process":30,"inherits":29}]},{},[1]);

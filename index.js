@@ -1,10 +1,63 @@
 // http://ufkkd63d4a84.flexi.koding.io:9966/
 var Game = require('crtrdg-gameloop')
 var Arrows = require('crtrdg-arrows')
+var Keyboard = require('crtrdg-keyboard')
 var Vec2 = require('vec2')
 var insidePolygon = require('point-in-polygon')
 var Color = require('color')
+var play = require('play-audio')
 
+// var sounds = [
+//     play('sound.wav').preload(),
+//     play('sound.wav').preload(),
+//     play('sound.wav').preload(),
+//     play('sound.wav').preload(),
+//     play('sound.wav').preload()
+// ]
+
+// var soundI = 0
+function hitSound() {
+    // sounds[soundI++].play()
+    // soundI = soundI % sounds.length
+}
+
+
+function Menu(game, x, y){
+    this.items = ['1 Player', '2 Player']
+    this.selected = 0
+    this.color = Color('#550000')
+    this.selectedColor = Color('#FFAAAA')
+    this.x = x
+    this.y = y
+    this.frame = 0
+    this.game = game
+}
+Menu.prototype.update = function() {
+    this.frame++
+    if (this.frame >= 100) this.frame = 0
+}
+Menu.prototype.draw = function(c) {
+    this.items.forEach(function(item, i) {
+        c.fillStyle = (i === this.selected ? this.selectedColor : this.color).rgbString()
+        var size = i === this.selected ? (Math.sin(this.frame * (Math.PI / 50)) - 0.5) * 3 + 48 : 48
+        c.font = size + "px 'Open Sans', sans-serif"
+        var text = c.measureText(item)
+        c.fillText(item, this.x - text.width / 2, this.y + i * 80 - 20)
+    }.bind(this))
+}
+Menu.prototype.up = function() {
+    this.selected--
+    if(this.selected < 0) this.selected = this.items.length - 1
+}
+Menu.prototype.down = function() {
+    this.selected++
+    if(this.selected > this.items.length - 1) this.selected = 0
+}
+Menu.prototype.select = function() {
+    this.game.state = "playing"
+    init(this.selected + 1)
+
+}
 
 function Hexagon(x, y, radius) {
     this.baseColor = Color('#B84848')
@@ -63,8 +116,17 @@ function Player() {
     this.active = false
     this.color = Color('#ff0000')
     this.id = 1
-    this.score = 0
     this.bot = false
+    this.init()
+}
+Player.prototype.init = function() {
+    this.score = 0
+    this.active = false
+    this.bot = false
+    this.hideScore = false
+}
+Player.prototype.setBot = function() {
+    this.bot = true
 }
 Player.prototype.collide = function() {
     // ball
@@ -75,19 +137,20 @@ Player.prototype.collide = function() {
 }
 Player.prototype.update = function(circle, ball) {
   if(this.bot){
+    var botSpeed = 1.8
     if(this.active) {
-         var l = circle.getCoordinates(this.angle-2)
+         var l = circle.getCoordinates(this.angle-botSpeed)
         var m = circle.getCoordinates(this.angle)
-        var r = circle.getCoordinates(this.angle+2)
+        var r = circle.getCoordinates(this.angle+botSpeed)
         if( distance(l, ball) > distance(m, ball) ){
              if( distance(r, ball) < distance(m, ball) ){
-                this.angle = this.angle+2
+                this.angle = this.angle+botSpeed
              }
         }else{
             if(distance(l, ball) >= distance(r, ball)){
-                this.angle = this.angle+2
+                this.angle = this.angle+botSpeed
             }else{
-                this.angle = this.angle-2
+                this.angle = this.angle-botSpeed
             }
         }   
     }
@@ -116,9 +179,12 @@ Player.prototype.draw = function(c) {
     c.fill()
     c.restore()
     c.closePath()
-    c.fillStyle = this.color.rgbString()
-    c.font = "48px 'Open Sans', sans-serif" //'48px Verdana, Geneva, sans-serif'
-    c.fillText(this.score, 400, 150 + this.id * 100)
+    // score
+    if(!this.hideScore) {
+        c.fillStyle = this.color.rgbString()
+        c.font = "48px 'Open Sans', sans-serif" //'48px Verdana, Geneva, sans-serif'
+        c.fillText(this.score, 400, 150 + this.id * 100)   
+    }
 }
 
 function Ball() {
@@ -177,6 +243,7 @@ Ball.prototype.checkPlayerCollision = function (player) {
     
     if(player.active && insidePolygon(ballVector.toArray(), playerVertices)) {
         player.collide()
+        hitSound()
         this.color = player.color
         this.moveBack()
         this.direction = 180 - this.direction + 2* player.angle
@@ -195,6 +262,7 @@ Ball.prototype.checkWallCollision = function (hexagon){
     
     if(!insidePolygon(ballVector.toArray(), polygon)) {
         this.moveBack()
+        hitSound()
         
         if(insidePolygon(ballVector.toArray(), [polygon[0],  [polygon[0][0],polygon[1][1]], polygon[1]])){
             angle = 30
@@ -238,8 +306,11 @@ Ball.prototype.draw = function(c) {
     c.restore()
 }
 
-
 var game = new Game()
+
+
+var player = new Player() 
+var player2 = new Player()
 
 var circle = new Circle(game.width/2, game.height/2)
 var ball = new Ball()
@@ -247,29 +318,58 @@ ball.startPoint.x = circle.x
 ball.startPoint.y = circle.y
 var hexagon = new Hexagon(circle.x, circle.y, 200)
 
-var player = new Player()
-//player.bot = true
-player.arrows = new Arrows()
-player.angle = 0 // degree
-player.color = Color('#550000')
-player.inactiveColor = Color('#801515')
+var menu = new Menu(game, circle.x, circle.y)
 
-var player2 = new Player()
-player2.id = 2
-player2.bot = true
-// player2.arrows = new Arrows()
-// player2.arrows.useWASD()
-player2.angle = 180
-player2.color = Color('#FFAAAA')
-player2.inactiveColor = Color('#D46A6A')
+var primaryArrows = new Arrows()
+
+primaryArrows.on('down', function () {
+    if(game.state === 'menu') menu.down()
+})
+
+primaryArrows.on('up', function() {
+    if(game.state === 'menu') menu.up()
+})
+
+primaryArrows.on('right', function() {
+    
+})
+
+var keyboard = new Keyboard()
+
+keyboard.on('keydown', function (key) {
+    if(key === '<enter>' && game.state === 'menu') menu.select()
+})
 
 var players = [player, player2]
 
-function init() {
+function init(players) {
+    player.init()
+    player.arrows = primaryArrows
+    player.angle = 0 // degree
+    player.color = Color('#550000')
+    player.inactiveColor = Color('#801515')
+
+    player2.init()
+    player2.id = 2
+    player2.angle = 180
+    player2.color = Color('#FFAAAA')
+    player2.inactiveColor = Color('#D46A6A')
+    player2.arrows = new Arrows()
+    player2.arrows.useWASD()
+
+    if(players === 0) {
+        player.setBot()
+        player.hideScore = true
+        player2.hideScore = true
+    }
+    if(players < 2) {
+        player2.setBot()
+    }
+
     ball.reset()
-    players[Math.round(Math.random())].active = true
+    player2.active = true
 }
-init()
+init(0)
 
 function distance(p1,p2){
     return Math.sqrt(Math.pow((p1.x - p2.x), 2) + Math.pow((p1.y - p2.y), 2))
@@ -277,6 +377,11 @@ function distance(p1,p2){
 
 function deg2rad(deg) {
     return deg * (Math.PI / 180)
+}
+
+function checkWinning(player, player2) {
+    if(player.score === 10) game.state = 'gameover'
+    if(player2.score === 10) game.state = 'gameover'
 }
 
 function drawPolygon(c, polygon) {
@@ -287,8 +392,10 @@ function drawPolygon(c, polygon) {
     c.closePath()
 }
 
+game.state = 'menu' // 'menu', 'playing', 'gameover'
+
 game.on('update', function() {
-// player
+ // player
     player.update(circle, ball)
     player2.update(circle, ball)
 // ball
@@ -296,15 +403,34 @@ game.on('update', function() {
    ball.checkPlayerCollision(player2)
    ball.checkWallCollision(hexagon) 
    ball.update()
+if(game.state === 'playing') {
+   checkWinning(player, player2)
+}
 // Hexagon
    hexagon.update()
+   menu.update()
 })
 
 game.on('draw', function(c) {
 
     //circle.draw(c)
-    ball.draw(c)
-    player.draw(c)
-    player2.draw(c)
+    // if(game.state !== 'menu') {
+        ball.draw(c)
+        player.draw(c)
+        player2.draw(c)
+    // }
     hexagon.draw(c)
+    if(game.state === 'menu') {
+        menu.draw(c)
+    }
+    if(game.state === 'gameover') {
+        if(player.score > player2.score) {
+            alert('Dark player wins')
+            game.state = 'menu'
+        } else {
+            alert('Light player wins')
+            game.state = 'menu'
+        }
+        init(0)
+    }
 })
