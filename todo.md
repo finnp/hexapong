@@ -1,0 +1,3 @@
+- Musik (Pontius01 von Leo), beim Ball aufkommen dieses Klirren im Hintergrund
+- Trail des Balles :D 
+- Farbe aendert sich um einen Grad, wenn ein Paddle getroffen wird
