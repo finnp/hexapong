@@ -3,31 +3,407 @@
 var Game = require('crtrdg-gameloop')
 var Arrows = require('crtrdg-arrows')
 var Keyboard = require('crtrdg-keyboard')
-var Vec2 = require('vec2')
-var insidePolygon = require('point-in-polygon')
-var Color = require('color')
 var play = require('play-audio')
 
-// var sounds = [
-//     play('sound.wav').preload(),
-//     play('sound.wav').preload(),
-//     play('sound.wav').preload(),
-//     play('sound.wav').preload(),
-//     play('sound.wav').preload()
-// ]
+var Player = require('./lib/player.js')
+var Ball = require('./lib/ball.js')
+var Menu = require('./lib/menu.js')
+var Hexagon = require('./lib/hexagon.js')
+var Circle = require('./lib/circle.js')
+var ColorScheme = require('./lib/colorscheme.js')
 
-// var soundI = 0
-function hitSound() {
-    // sounds[soundI++].play()
-    // soundI = soundI % sounds.length
+
+var colors = new ColorScheme()
+
+colors.rotate(200)
+
+var game = new Game()
+
+var player = new Player() 
+var player2 = new Player()
+
+var circle = new Circle(game.width/2, game.height/2)
+var ball = new Ball()
+ball.startPoint.x = circle.x
+ball.startPoint.y = circle.y
+var hexagon = new Hexagon(colors.get('hexagon'), circle.x, circle.y, 200)
+
+var menu = new Menu(game, circle.x, circle.y)
+menu.color = colors.get('dark')
+menu.selectedColor = colors.get('light')
+
+var primaryArrows = new Arrows()
+
+primaryArrows.on('down', function () {
+    if(game.state === 'menu') menu.down()
+})
+
+primaryArrows.on('up', function() {
+    if(game.state === 'menu') menu.up()
+})
+
+var keyboard = new Keyboard()
+
+keyboard.on('keydown', function (key) {
+    if(key === '<enter>' && game.state === 'menu') menu.select()
+})
+
+var players = [player, player2]
+
+game.init = function init(players) {
+    
+    player.init()
+    player.arrows = primaryArrows
+    player.angle = 0 // degree
+    player.color = colors.get('dark')
+    player.inactiveColor = colors.get('darkInactive')
+
+
+    player2.init()
+    player2.id = 2
+    player2.angle = 180
+    player2.color = colors.get('light')
+    player2.inactiveColor = colors.get('lightInactive')
+    player2.arrows = new Arrows()
+    player2.arrows.useWASD()
+
+    if(players === 0) {
+        player.setBot()
+        player.hideScore = true
+        player2.hideScore = true
+    }
+    if(players < 2) {
+        player2.setBot()
+    }
+
+    ball.reset()
+    player2.active = true
+    ball.color = player2.color.clone()
+}
+game.init(0)
+
+function checkWinning(player, player2) {
+    if(player2.score === 10 || player.score === 10) {
+        game.state = 'gameover'
+        colors.random()
+    }
 }
 
+game.state = 'menu' // 'menu', 'playing', 'gameover'
+
+game.on('update', function() {
+ // player
+    player.update(circle, ball)
+    player2.update(circle, ball)
+// ball
+   ball.checkPlayerCollision(player, player2)
+   ball.checkPlayerCollision(player2, player)
+   ball.checkWallCollision(hexagon, [player, player2]) 
+   ball.update()
+if(game.state === 'playing') {
+   checkWinning(player, player2)
+}
+// Hexagon
+   hexagon.update()
+   menu.update()
+})
+
+game.on('draw', function(c) {
+
+    //circle.draw(c)
+    // if(game.state !== 'menu') {
+        ball.draw(c)
+        player.draw(c)
+        player2.draw(c)
+    // }
+    hexagon.draw(c)
+    if(game.state === 'menu') {
+        menu.draw(c)
+    }
+    if(game.state === 'gameover') {
+        if(player.score > player2.score) {
+            alert('Dark player wins')
+            game.state = 'menu'
+        } else {
+            alert('Light player wins')
+            game.state = 'menu'
+        }
+        game.init(0)
+    }
+})
+
+},{"./lib/ball.js":2,"./lib/circle.js":3,"./lib/colorscheme.js":4,"./lib/hexagon.js":7,"./lib/menu.js":8,"./lib/player.js":9,"crtrdg-arrows":15,"crtrdg-gameloop":17,"crtrdg-keyboard":22,"play-audio":25}],2:[function(require,module,exports){
+var Vec2 = require('vec2')
+var insidePolygon = require('point-in-polygon')
+var deg2rad = require('./helper/deg2rad.js')
+
+module.exports = Ball
+
+function Ball() {
+    this.radius = 2
+    this.startPoint = {x: 0, y: 0}
+    this.reset()
+    this.tail = []
+}
+Ball.prototype.reset = function() {
+    this.tail = []
+    this.x = this.startPoint.x
+    this.y = this.startPoint.y
+    this.speed = 2
+    this.direction = Math.random()*360
+}
+Ball.prototype.update = function() {
+    var diff = 0.0009
+    this.tail.push([this.x * (1 - diff + Math.random() * diff * 2), this.y * (1 - diff + Math.random() * diff * 2)])
+    if(this.tail.length > 20) this.tail.shift()
+    var p = this.moveVector(this.direction)
+    this.x += p.x 
+    this.y += p.y
+}
+Ball.prototype.moveVector = function(deg) {
+  var q = {}
+  q.x = this.speed * Math.cos(deg * (Math.PI / 180))
+  q.y = this.speed * Math.sin(deg * (Math.PI / 180))
+  return q
+}
+Ball.prototype.moveBack = function() {
+    var p = this.moveVector(this.direction)
+    this.x -= p.x
+    this.y -= p.y
+}
+Ball.prototype.checkPlayerCollision = function (player, otherPlayer) {
+    var cx = this.x 
+    var cy = this.y
+    
+    var x = player.x 
+    var y = player.y 
+    var width = player.width 
+    var height = player.height 
+    var deg = player.angle
+    
+    var degRad =  deg2rad(deg)
+    
+    var ballVector = Vec2([cx, cy]).add( Vec2([this.radius, 0]).rotate(this.direction * (Math.PI / 180)) )
+
+   // https://www.npmjs.com/package/vec2 has a rotate function
+    var playerCentre = Vec2([x+width/2,y+height/2])
+    var playerVertices = []
+    playerVertices[0] = Vec2([-width/2,-height/2]).rotate(degRad).add(playerCentre)
+    playerVertices[1] = Vec2([+width/2,-height/2]).rotate(degRad).add(playerCentre)
+    playerVertices[2] = Vec2([+width/2,+height/2]).rotate(degRad).add(playerCentre)
+    playerVertices[3] = Vec2([-width/2,+height/2]).rotate(degRad).add(playerCentre)
+    
+    playerVertices = playerVertices.map(function(point){
+      return point.toArray()  
+    })
+    
+    if(player.active && insidePolygon(ballVector.toArray(), playerVertices)) {
+        player.collide(otherPlayer)
+        this.color = player.color
+        this.moveBack()
+        this.direction = 180 - this.direction + 2* player.angle
+        this.direction = this.direction % 360
+    }
+}
+
+Ball.prototype.checkWallCollision = function (hexagon, players){
+    
+    var cx = this.x 
+    var cy = this.y
+    var angle =  3
+    var polygon = hexagon.polygon
+    
+    var ballVector = Vec2([cx, cy]).add( Vec2([this.radius, 0]).rotate(this.direction * (Math.PI / 180)) )
+    
+    if(!insidePolygon(ballVector.toArray(), polygon)) {
+        this.moveBack()
+        
+        if(insidePolygon(ballVector.toArray(), [polygon[0],  [polygon[0][0],polygon[1][1]], polygon[1]])){
+            angle = 30
+        }
+        if(insidePolygon(ballVector.toArray(), [polygon[1],  [polygon[1][0],polygon[1][1]+10], [polygon[2][0],polygon[2][1]+10], polygon[2]])){
+            angle = 90
+        }
+        if(insidePolygon(ballVector.toArray(), [polygon[2],  [polygon[3][0],polygon[2][1]], polygon[3]])){
+            angle = 150
+        }
+        if(insidePolygon(ballVector.toArray(), [polygon[3],  [polygon[3][0],polygon[4][1]], polygon[4]])){
+            angle = 210
+        }
+        if(insidePolygon(ballVector.toArray(), [polygon[4],  [polygon[4][0],polygon[4][1]-10], [polygon[5][0],polygon[5][1]-10], polygon[5]])){
+            angle = 270
+        }
+        if(insidePolygon(ballVector.toArray(), [polygon[5],  [polygon[0][0],polygon[5][1]], polygon[0]])){
+            angle = 330
+        }
+        
+        players.forEach(function(player) {
+            if(!player.active) {
+                player.score++
+                hexagon.color = player.inactiveColor
+                hexagon.hitTime = 15
+            }
+        })
+        
+        this.direction = 180 - this.direction + 2*angle
+        this.direction = this.direction % 360
+    }
+}
+
+Ball.prototype.draw = function(c) {
+    var radius = this.radius
+    var color = this.color.clone()
+    c.beginPath()
+    c.fillStyle = color.rgbString()
+    c.arc(this.x, this.y, radius, 0, 2 * Math.PI, false)
+    c.fill()
+    c.closePath()
+
+    // color.clearer(0.75)
+    var tail = this.tail
+    
+    for(var i = tail.length - 1; i >= 0; i--) {
+        var p = tail[i]
+        c.beginPath()
+        c.fillStyle = color.rgbString()
+        c.arc(p[0], p[1], radius, 0, 2 * Math.PI, false)
+        // radius *= 0.95
+        radius = (-Math.exp((tail.length - i)/ tail.length) + 3)
+        
+        color.clearer(0.018)
+        c.fill()
+        c.closePath()
+    }
+
+
+    // c.restore()
+}
+},{"./helper/deg2rad.js":5,"point-in-polygon":34,"vec2":35}],3:[function(require,module,exports){
+module.exports = Circle
+
+function Circle(x, y) {
+    this.x = x || 200
+    this.y = y || 200
+    this.radius = 150
+}
+
+Circle.prototype.draw = function(c) {
+    c.beginPath()
+    c.arc(this.x, this.y, this.radius, 0, 2 * Math.PI, false)
+    c.lineWidth = 2
+    c.strokeStyle = 'white'
+    c.stroke()
+    c.closePath()
+}
+
+Circle.prototype.getCoordinates = function(deg) {
+  var q = {}
+  q.x = this.x + this.radius * Math.cos(deg * (Math.PI / 180))
+  q.y = this.y + this.radius * Math.sin(deg * (Math.PI / 180))
+  return q
+}
+
+},{}],4:[function(require,module,exports){
+module.exports = ColorScheme
+
+var Color = require('color')
+
+// TODO: https://github.com/tmcw/relative-luminance
+
+function ColorScheme(hue) {
+    hue = hue || Math.round(Math.random() * 360)
+    this.hue = hue
+    this.colors = {
+        background: Color().hsl(hue, 50, 45),
+        light: Color().hsl(hue, 100, 83),
+        lightInactive: Color().hsl(hue, 55, 62),
+        dark: Color().hsl(hue, 100, 17),
+        darkInactive: Color().hsl(hue, 72, 29),
+        hexagon: Color().hsl(hue, 44, 50)
+    }
+    document.body.style.backgroundColor = this.colors.background.rgbString()
+}
+
+ColorScheme.prototype.get = function(name) {
+    return this.colors[name]
+}
+
+ColorScheme.prototype.setHue = function(hue) {
+    this.hue = hue % 360
+    for(var color in this.colors) {
+        this.colors[color].hue(hue)
+    }
+    document.body.style.backgroundColor = this.colors.background.rgbString()
+}
+
+
+ColorScheme.prototype.random = function() {
+    this.setHue(Math.round(Math.random() * 360))
+}
+
+ColorScheme.prototype.rotate = function(time) {
+    // this was for fun, but is actually quite subtle and nice
+    setInterval(function() {
+        this.setHue(++this.hue)
+    }.bind(this), time || 150)
+}
+},{"color":10}],5:[function(require,module,exports){
+function deg2rad(deg) {
+    return deg * (Math.PI / 180)
+}
+
+module.exports = deg2rad
+},{}],6:[function(require,module,exports){
+function drawPolygon(c, polygon) {
+    c.beginPath()
+    c.moveTo(polygon[0][0], polygon[0][1]) 
+    for(var i = 1; i < polygon.length; i++) c.lineTo(polygon[i][0], polygon[i][1]) 
+    c.lineTo(polygon[0][0], polygon[0][1])
+    c.closePath()
+}
+
+module.exports = drawPolygon
+},{}],7:[function(require,module,exports){
+var drawPolygon = require('./helper/drawpolygon.js')
+
+module.exports = Hexagon
+
+function Hexagon(baseColor, x, y, radius) {
+    this.baseColor = baseColor
+    this.color = this.baseColor
+    this.hitTime = 0 // for blinking
+    this.polygon = []
+    this.radius = radius
+    this.x = x
+    this.y = y
+    for(var i = 0; i < 6; i++)
+        this.polygon.push([this.radius * Math.cos(i * 1/3 * Math.PI) + x, this.radius * Math.sin(i * 1/3 * Math.PI) + y])
+}
+
+Hexagon.prototype.update = function() {
+    this.hitTime--
+    if(this.hitTime === 0) {
+        this.color = this.baseColor
+    }
+}
+
+Hexagon.prototype.draw = function(c) {
+    c.save()
+    c.beginPath()
+    drawPolygon(c, this.polygon)
+    c.strokeStyle = this.color.rgbString()
+    c.lineWidth = 5
+    c.stroke()
+    c.closePath()
+    c.restore()
+}
+
+},{"./helper/drawpolygon.js":6}],8:[function(require,module,exports){
+module.exports = Menu
 
 function Menu(game, x, y){
     this.items = ['1 Player', '2 Player']
     this.selected = 0
-    this.color = Color('#550000')
-    this.selectedColor = Color('#FFAAAA')
     this.x = x
     this.y = y
     this.frame = 0
@@ -56,66 +432,17 @@ Menu.prototype.down = function() {
 }
 Menu.prototype.select = function() {
     this.game.state = "playing"
-    init(this.selected + 1)
-
+    this.game.init(this.selected + 1)
 }
+},{}],9:[function(require,module,exports){
+var deg2rad = require('./helper/deg2rad.js')
 
-function Hexagon(x, y, radius) {
-    this.baseColor = Color('#B84848')
-    this.color = this.baseColor
-    this.hitTime = 0 // for blinking
-    this.polygon = []
-    this.radius = radius
-    this.x = x
-    this.y = y
-    for(var i = 0; i < 6; i++)
-        this.polygon.push([this.radius * Math.cos(i * 1/3 * Math.PI) + x, this.radius * Math.sin(i * 1/3 * Math.PI) + y])
-}
-
-Hexagon.prototype.update = function() {
-    this.hitTime--
-    if(this.hitTime === 0) {
-        this.color = this.baseColor
-    }
-}
-
-Hexagon.prototype.draw = function(c) {
-    c.beginPath()
-    drawPolygon(c, hexagon.polygon)
-    c.strokeStyle = this.color.rgbString()
-    c.lineWidth = 5
-    c.stroke()
-    c.closePath()
-}
-
-function Circle(x, y) {
-    this.x = x || 200
-    this.y = y || 200
-    this.radius = 150
-    this.color = Color('#aaa')
-}
-
-Circle.prototype.draw = function(c) {
-    c.beginPath()
-    c.arc(this.x, this.y, this.radius, 0, 2 * Math.PI, false)
-    c.lineWidth = 2
-    c.strokeStyle = this.color.rgbString()
-    c.stroke()
-    c.closePath()
-}
-
-Circle.prototype.getCoordinates = function(deg) {
-  var q = {}
-  q.x = this.x + this.radius * Math.cos(deg * (Math.PI / 180))
-  q.y = this.y + this.radius * Math.sin(deg * (Math.PI / 180))
-  return q
-}
+module.exports = Player
 
 function Player() {
     this.width = 4
     this.height = 40
     this.active = false
-    this.color = Color('#ff0000')
     this.id = 1
     this.bot = false
     this.init()
@@ -129,11 +456,9 @@ Player.prototype.init = function() {
 Player.prototype.setBot = function() {
     this.bot = true
 }
-Player.prototype.collide = function() {
+Player.prototype.collide = function(otherPlayer) {
     // ball
-    players.forEach(function(player) {
-        player.active = true
-    })
+    otherPlayer.active = true
     this.active = false
 }
 Player.prototype.update = function(circle, ball) {
@@ -164,13 +489,13 @@ Player.prototype.update = function(circle, ball) {
 
   // update .x and .y
   var p = circle.getCoordinates(this.angle)
-  this.x =  p.x - (player.width/2)
-  this.y =  p.y - (player.height/2)
+  this.x =  p.x - (this.width/2)
+  this.y =  p.y - (this.height/2)
 }
 Player.prototype.draw = function(c) {
     c.save()
     c.beginPath()
-    c.translate(this.x + (player.width/2), this.y + (player.height/2))
+    c.translate(this.x + (this.width/2), this.y + (this.height/2))
     c.rotate(deg2rad(this.angle))
     c.rect(- (this.width/2), - (this.height/2),  this.width , this.height)
     var color = this.color.clone()
@@ -188,255 +513,12 @@ Player.prototype.draw = function(c) {
     }
 }
 
-function Ball() {
-    this.radius = 2
-    this.startPoint = {x: 0, y: 0}
-    this.color = Color('#fff')
-    this.reset()
-}
-Ball.prototype.reset = function() {
-    this.x = this.startPoint.x
-    this.y = this.startPoint.y
-    this.speed = 2
-    this.direction = Math.random()*360
-}
-Ball.prototype.update = function() {
-    var p = this.moveVector(this.direction)
-    this.x += p.x 
-    this.y += p.y
-}
-Ball.prototype.moveVector = function(deg) {
-  var q = {}
-  q.x = this.speed * Math.cos(deg * (Math.PI / 180))
-  q.y = this.speed * Math.sin(deg * (Math.PI / 180))
-  return q
-}
-Ball.prototype.moveBack = function() {
-    var p = this.moveVector(this.direction)
-    this.x -= p.x
-    this.y -= p.y
-}
-Ball.prototype.checkPlayerCollision = function (player) {
-    var cx = this.x 
-    var cy = this.y
-    
-    var x = player.x 
-    var y = player.y 
-    var width = player.width 
-    var height = player.height 
-    var deg = player.angle
-    
-    var degRad =  deg2rad(deg)
-    
-    var ballVector = Vec2([cx, cy]).add( Vec2([this.radius, 0]).rotate(this.direction * (Math.PI / 180)) )
-
-   // https://www.npmjs.com/package/vec2 has a rotate function
-    var playerCentre = Vec2([x+width/2,y+height/2])
-    var playerVertices = []
-    playerVertices[0] = Vec2([-width/2,-height/2]).rotate(degRad).add(playerCentre)
-    playerVertices[1] = Vec2([+width/2,-height/2]).rotate(degRad).add(playerCentre)
-    playerVertices[2] = Vec2([+width/2,+height/2]).rotate(degRad).add(playerCentre)
-    playerVertices[3] = Vec2([-width/2,+height/2]).rotate(degRad).add(playerCentre)
-    
-    playerVertices = playerVertices.map(function(point){
-      return point.toArray()  
-    })
-    
-    if(player.active && insidePolygon(ballVector.toArray(), playerVertices)) {
-        player.collide()
-        hitSound()
-        this.color = player.color
-        this.moveBack()
-        this.direction = 180 - this.direction + 2* player.angle
-        this.direction = this.direction % 360
-    }
-}
-
-Ball.prototype.checkWallCollision = function (hexagon){
-    
-    var cx = this.x 
-    var cy = this.y
-    var angle =  3
-    var polygon = hexagon.polygon
-    
-    var ballVector = Vec2([cx, cy]).add( Vec2([this.radius, 0]).rotate(this.direction * (Math.PI / 180)) )
-    
-    if(!insidePolygon(ballVector.toArray(), polygon)) {
-        this.moveBack()
-        hitSound()
-        
-        if(insidePolygon(ballVector.toArray(), [polygon[0],  [polygon[0][0],polygon[1][1]], polygon[1]])){
-            angle = 30
-        }
-        if(insidePolygon(ballVector.toArray(), [polygon[1],  [polygon[1][0],polygon[1][1]+10], [polygon[2][0],polygon[2][1]+10], polygon[2]])){
-            angle = 90
-        }
-        if(insidePolygon(ballVector.toArray(), [polygon[2],  [polygon[3][0],polygon[2][1]], polygon[3]])){
-            angle = 150
-        }
-        if(insidePolygon(ballVector.toArray(), [polygon[3],  [polygon[3][0],polygon[4][1]], polygon[4]])){
-            angle = 210
-        }
-        if(insidePolygon(ballVector.toArray(), [polygon[4],  [polygon[4][0],polygon[4][1]-10], [polygon[5][0],polygon[5][1]-10], polygon[5]])){
-            angle = 270
-        }
-        if(insidePolygon(ballVector.toArray(), [polygon[5],  [polygon[0][0],polygon[5][1]], polygon[0]])){
-            angle = 330
-        }
-        
-        players.forEach(function(player) {
-            if(!player.active) {
-                player.score++
-                hexagon.color = player.inactiveColor.clone()
-                hexagon.hitTime = 15
-            }
-        })
-        
-        this.direction = 180 - this.direction + 2*angle
-        this.direction = this.direction % 360
-    }
-}
-
-Ball.prototype.draw = function(c) {
-    c.save()
-    c.beginPath()
-    c.arc(this.x, this.y, this.radius, 0, 2 * Math.PI, false)
-    c.fillStyle = this.color.rgbString()
-    c.fill()
-    c.closePath()    
-    c.restore()
-}
-
-var game = new Game()
-
-
-var player = new Player() 
-var player2 = new Player()
-
-var circle = new Circle(game.width/2, game.height/2)
-var ball = new Ball()
-ball.startPoint.x = circle.x
-ball.startPoint.y = circle.y
-var hexagon = new Hexagon(circle.x, circle.y, 200)
-
-var menu = new Menu(game, circle.x, circle.y)
-
-var primaryArrows = new Arrows()
-
-primaryArrows.on('down', function () {
-    if(game.state === 'menu') menu.down()
-})
-
-primaryArrows.on('up', function() {
-    if(game.state === 'menu') menu.up()
-})
-
-primaryArrows.on('right', function() {
-    
-})
-
-var keyboard = new Keyboard()
-
-keyboard.on('keydown', function (key) {
-    if(key === '<enter>' && game.state === 'menu') menu.select()
-})
-
-var players = [player, player2]
-
-function init(players) {
-    player.init()
-    player.arrows = primaryArrows
-    player.angle = 0 // degree
-    player.color = Color('#550000')
-    player.inactiveColor = Color('#801515')
-
-    player2.init()
-    player2.id = 2
-    player2.angle = 180
-    player2.color = Color('#FFAAAA')
-    player2.inactiveColor = Color('#D46A6A')
-    player2.arrows = new Arrows()
-    player2.arrows.useWASD()
-
-    if(players === 0) {
-        player.setBot()
-        player.hideScore = true
-        player2.hideScore = true
-    }
-    if(players < 2) {
-        player2.setBot()
-    }
-
-    ball.reset()
-    player2.active = true
-}
-init(0)
+// functions
 
 function distance(p1,p2){
     return Math.sqrt(Math.pow((p1.x - p2.x), 2) + Math.pow((p1.y - p2.y), 2))
 }
-
-function deg2rad(deg) {
-    return deg * (Math.PI / 180)
-}
-
-function checkWinning(player, player2) {
-    if(player.score === 10) game.state = 'gameover'
-    if(player2.score === 10) game.state = 'gameover'
-}
-
-function drawPolygon(c, polygon) {
-    c.beginPath()
-    c.moveTo(polygon[0][0], polygon[0][1]) 
-    for(var i = 1; i < polygon.length; i++) c.lineTo(polygon[i][0], polygon[i][1]) 
-    c.lineTo(polygon[0][0], polygon[0][1])
-    c.closePath()
-}
-
-game.state = 'menu' // 'menu', 'playing', 'gameover'
-
-game.on('update', function() {
- // player
-    player.update(circle, ball)
-    player2.update(circle, ball)
-// ball
-   ball.checkPlayerCollision(player)
-   ball.checkPlayerCollision(player2)
-   ball.checkWallCollision(hexagon) 
-   ball.update()
-if(game.state === 'playing') {
-   checkWinning(player, player2)
-}
-// Hexagon
-   hexagon.update()
-   menu.update()
-})
-
-game.on('draw', function(c) {
-
-    //circle.draw(c)
-    // if(game.state !== 'menu') {
-        ball.draw(c)
-        player.draw(c)
-        player2.draw(c)
-    // }
-    hexagon.draw(c)
-    if(game.state === 'menu') {
-        menu.draw(c)
-    }
-    if(game.state === 'gameover') {
-        if(player.score > player2.score) {
-            alert('Dark player wins')
-            game.state = 'menu'
-        } else {
-            alert('Light player wins')
-            game.state = 'menu'
-        }
-        init(0)
-    }
-})
-
-},{"color":2,"crtrdg-arrows":7,"crtrdg-gameloop":9,"crtrdg-keyboard":14,"play-audio":17,"point-in-polygon":26,"vec2":27}],2:[function(require,module,exports){
+},{"./helper/deg2rad.js":5}],10:[function(require,module,exports){
 /* MIT license */
 var convert = require("color-convert"),
     string = require("color-string");
@@ -871,7 +953,7 @@ Color.prototype.setChannel = function(space, index, val) {
 
 module.exports = Color;
 
-},{"color-convert":4,"color-string":5}],3:[function(require,module,exports){
+},{"color-convert":12,"color-string":13}],11:[function(require,module,exports){
 /* MIT license */
 
 module.exports = {
@@ -1564,7 +1646,7 @@ for (var key in cssKeywords) {
   reverseKeywords[JSON.stringify(cssKeywords[key])] = key;
 }
 
-},{}],4:[function(require,module,exports){
+},{}],12:[function(require,module,exports){
 var conversions = require("./conversions");
 
 var convert = function() {
@@ -1657,7 +1739,7 @@ Converter.prototype.getValues = function(space) {
 });
 
 module.exports = convert;
-},{"./conversions":3}],5:[function(require,module,exports){
+},{"./conversions":11}],13:[function(require,module,exports){
 /* MIT license */
 var colorNames = require('color-name');
 
@@ -1880,7 +1962,7 @@ for (var name in colorNames) {
    reverseNames[colorNames[name]] = name;
 }
 
-},{"color-name":6}],6:[function(require,module,exports){
+},{"color-name":14}],14:[function(require,module,exports){
 module.exports={
 	"aliceblue": [240, 248, 255],
 	"antiquewhite": [250, 235, 215],
@@ -2031,7 +2113,7 @@ module.exports={
 	"yellow": [255, 255, 0],
 	"yellowgreen": [154, 205, 50]
 }
-},{}],7:[function(require,module,exports){
+},{}],15:[function(require,module,exports){
 var EventEmitter = require('events').EventEmitter;
 var inherits = require('inherits');
 
@@ -2117,7 +2199,7 @@ Arrows.prototype.useWASD = function () {
   this.setArrowKeyCodes(65, 68, 87, 83);
 }
 
-},{"events":28,"inherits":8}],8:[function(require,module,exports){
+},{"events":36,"inherits":16}],16:[function(require,module,exports){
 if (typeof Object.create === 'function') {
   // implementation from standard node.js 'util' module
   module.exports = function inherits(ctor, superCtor) {
@@ -2142,7 +2224,7 @@ if (typeof Object.create === 'function') {
   }
 }
 
-},{}],9:[function(require,module,exports){
+},{}],17:[function(require,module,exports){
 var EventEmitter = require('events').EventEmitter;
 var requestAnimationFrame = require('raf-stream');
 var inherits = require('inherits');
@@ -2234,9 +2316,9 @@ Game.prototype.drawAllLayers = function(){
     this.emit('draw', this.context);
   }
 }
-},{"events":28,"inherits":10,"raf-stream":11,"util":32}],10:[function(require,module,exports){
-arguments[4][8][0].apply(exports,arguments)
-},{"dup":8}],11:[function(require,module,exports){
+},{"events":36,"inherits":18,"raf-stream":19,"util":40}],18:[function(require,module,exports){
+arguments[4][16][0].apply(exports,arguments)
+},{"dup":16}],19:[function(require,module,exports){
 var EE = require('events').EventEmitter
   , raf = require('raf')
 
@@ -2287,7 +2369,7 @@ module.exports = function(el, tick) {
   }
 }
 
-},{"events":28,"raf":12}],12:[function(require,module,exports){
+},{"events":36,"raf":20}],20:[function(require,module,exports){
 var now = require('performance-now')
   , global = typeof window === 'undefined' ? {} : window
   , vendors = ['ms', 'moz', 'webkit', 'o']
@@ -2354,7 +2436,7 @@ module.exports.cancel = function() {
   caf.apply(global, arguments)
 }
 
-},{"performance-now":13}],13:[function(require,module,exports){
+},{"performance-now":21}],21:[function(require,module,exports){
 (function (process){
 // Generated by CoffeeScript 1.6.3
 (function() {
@@ -2394,7 +2476,7 @@ module.exports.cancel = function() {
 */
 
 }).call(this,require('_process'))
-},{"_process":30}],14:[function(require,module,exports){
+},{"_process":38}],22:[function(require,module,exports){
 var EventEmitter = require('events').EventEmitter;
 var inherits = require('inherits');
 var vkey = require('vkey');
@@ -2425,9 +2507,9 @@ Keyboard.prototype.initializeListeners = function(){
     delete self.keysDown[vkey[e.keyCode]];
   }, false);
 };
-},{"events":28,"inherits":15,"vkey":16}],15:[function(require,module,exports){
-arguments[4][8][0].apply(exports,arguments)
-},{"dup":8}],16:[function(require,module,exports){
+},{"events":36,"inherits":23,"vkey":24}],23:[function(require,module,exports){
+arguments[4][16][0].apply(exports,arguments)
+},{"dup":16}],24:[function(require,module,exports){
 var ua = typeof window !== 'undefined' ? window.navigator.userAgent : ''
   , isOSX = /OS X/.test(ua)
   , isOpera = /Opera/.test(ua)
@@ -2565,10 +2647,10 @@ for(i = 112; i < 136; ++i) {
   output[i] = 'F'+(i-111)
 }
 
-},{}],17:[function(require,module,exports){
+},{}],25:[function(require,module,exports){
 module.exports = require('media').audio;
 
-},{"media":18}],18:[function(require,module,exports){
+},{"media":26}],26:[function(require,module,exports){
 module.exports = require('./lib/player');
 module.exports.audio = media('audio');
 module.exports.video = media('video');
@@ -2579,7 +2661,7 @@ function media (kind) {
   };
 }
 
-},{"./lib/player":20}],19:[function(require,module,exports){
+},{"./lib/player":28}],27:[function(require,module,exports){
 var table = {
   aif  : "audio/x-aiff",
   aiff : "audio/x-aiff",
@@ -2603,7 +2685,7 @@ function mimeOf(url){
   return table[ url.split('.').slice(-1)[0] ];
 }
 
-},{}],20:[function(require,module,exports){
+},{}],28:[function(require,module,exports){
 var newChain  = require('new-chain'),
     src = require('./src'),
     render = require('./render');
@@ -2680,7 +2762,7 @@ function play(media, urls, dom){
 
 }
 
-},{"./render":21,"./src":22,"new-chain":25}],21:[function(require,module,exports){
+},{"./render":29,"./src":30,"new-chain":33}],29:[function(require,module,exports){
 var domify = require('domify'),
     templates = require("./templates");
 
@@ -2690,7 +2772,7 @@ function render(media){
   return domify(templates[media + '.html']);
 }
 
-},{"./templates":23,"domify":24}],22:[function(require,module,exports){
+},{"./templates":31,"domify":32}],30:[function(require,module,exports){
 var mimeOf = require("./mime");
 
 module.exports = {
@@ -2727,10 +2809,10 @@ function pick(el, urls){
   return canPlay[0].url || canPlay[0];
 }
 
-},{"./mime":19}],23:[function(require,module,exports){
+},{"./mime":27}],31:[function(require,module,exports){
 exports["audio.html"] = "<audio preload=\"auto\" /></audio>"
 exports["video.html"] = "<video preload=\"auto\" /></video>"
-},{}],24:[function(require,module,exports){
+},{}],32:[function(require,module,exports){
 
 /**
  * Expose `parse`.
@@ -2803,7 +2885,7 @@ function parse(html) {
   return fragment;
 }
 
-},{}],25:[function(require,module,exports){
+},{}],33:[function(require,module,exports){
 module.exports = newChain;
 module.exports.from = from;
 
@@ -2860,7 +2942,7 @@ function newChain(){
   return from({}).apply(undefined, arguments);
 }
 
-},{}],26:[function(require,module,exports){
+},{}],34:[function(require,module,exports){
 module.exports = function (point, vs) {
     // ray-casting algorithm based on
     // http://www.ecse.rpi.edu/Homepages/wrf/Research/Short_Notes/pnpoly.html
@@ -2880,7 +2962,7 @@ module.exports = function (point, vs) {
     return inside;
 };
 
-},{}],27:[function(require,module,exports){
+},{}],35:[function(require,module,exports){
 ;(function inject(clean, precision, undef) {
 
   var isArray = function (a) {
@@ -3355,7 +3437,7 @@ module.exports = function (point, vs) {
   return Vec2;
 })();
 
-},{}],28:[function(require,module,exports){
+},{}],36:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -3658,9 +3740,9 @@ function isUndefined(arg) {
   return arg === void 0;
 }
 
-},{}],29:[function(require,module,exports){
-arguments[4][8][0].apply(exports,arguments)
-},{"dup":8}],30:[function(require,module,exports){
+},{}],37:[function(require,module,exports){
+arguments[4][16][0].apply(exports,arguments)
+},{"dup":16}],38:[function(require,module,exports){
 // shim for using process in browser
 
 var process = module.exports = {};
@@ -3720,14 +3802,14 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-},{}],31:[function(require,module,exports){
+},{}],39:[function(require,module,exports){
 module.exports = function isBuffer(arg) {
   return arg && typeof arg === 'object'
     && typeof arg.copy === 'function'
     && typeof arg.fill === 'function'
     && typeof arg.readUInt8 === 'function';
 }
-},{}],32:[function(require,module,exports){
+},{}],40:[function(require,module,exports){
 (function (process,global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -4317,4 +4399,4 @@ function hasOwnProperty(obj, prop) {
 }
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./support/isBuffer":31,"_process":30,"inherits":29}]},{},[1]);
+},{"./support/isBuffer":39,"_process":38,"inherits":37}]},{},[1]);
