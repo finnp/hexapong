@@ -448,6 +448,7 @@ function Player () {
   this.active = false
   this.id = 1
   this.bot = false
+  this.circle = null
   this.init()
 }
 Player.prototype.init = function () {
@@ -465,6 +466,7 @@ Player.prototype.collide = function (otherPlayer) {
   this.active = false
 }
 Player.prototype.update = function (circle, ball) {
+  this.circle = circle
   if (this.bot) {
     var botSpeed = 1.8
     if (this.active) {
@@ -500,7 +502,7 @@ Player.prototype.draw = function (c) {
   c.beginPath()
   c.translate(this.x + (this.width / 2), this.y + (this.height / 2))
   c.rotate(deg2rad(this.angle))
-  c.rect(- (this.width / 2), - (this.height / 2), this.width , this.height)
+  c.rect(-(this.width / 2), -(this.height / 2), this.width, this.height)
   var color = this.color.clone()
   // if(!this.active) color.alpha(0.25)
   if (!this.active) color = this.inactiveColor
@@ -512,7 +514,8 @@ Player.prototype.draw = function (c) {
   if (!this.hideScore) {
     c.fillStyle = this.color.rgbString()
     c.font = "48px 'Open Sans', sans-serif" // '48px Verdana, Geneva, sans-serif'
-    c.fillText(this.score, 490  + (this.id - 1) * 400, 310)
+    var p = this.circle.getCoordinates(this.id * 180)
+    c.fillText(this.score, p.x - 14 , p.y - 130)
   }
 }
 
