@@ -11,7 +11,7 @@ var Hexagon = require('./lib/hexagon.js')
 var Circle = require('./lib/circle.js')
 var ColorScheme = require('./lib/colorscheme.js')
 
-var WINNING_SCORE = 2
+var WINNING_SCORE = 10
 
 var colors = new ColorScheme()
 
@@ -45,7 +45,7 @@ primaryArrows.on('up', function () {
 var keyboard = new Keyboard()
 
 keyboard.on('keydown', function (key) {
-  if (game.state === 'menu' && key === '<enter>') menu.select()
+  if (game.state === 'menu' && (key === '<enter>' || key === '<space>')) menu.select()
   if (game.state === 'gameover' && key === '<space>') {
     game.init(0)
     game.state = 'menu'

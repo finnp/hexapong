@@ -3,7 +3,7 @@
 var Game = require('crtrdg-gameloop')
 var Arrows = require('crtrdg-arrows')
 var Keyboard = require('crtrdg-keyboard')
-var play = require('play-audio')
+// var play = require('play-audio')
 
 var Player = require('./lib/player.js')
 var Ball = require('./lib/ball.js')
@@ -12,6 +12,7 @@ var Hexagon = require('./lib/hexagon.js')
 var Circle = require('./lib/circle.js')
 var ColorScheme = require('./lib/colorscheme.js')
 
+var WINNING_SCORE = 10
 
 var colors = new ColorScheme()
 
@@ -19,10 +20,10 @@ colors.rotate(200)
 
 var game = new Game()
 
-var player = new Player() 
+var player = new Player()
 var player2 = new Player()
 
-var circle = new Circle(game.width/2, game.height/2)
+var circle = new Circle(game.width / 2, game.height / 2)
 var ball = new Ball()
 ball.startPoint.x = circle.x
 ball.startPoint.y = circle.y
@@ -35,268 +36,267 @@ menu.selectedColor = colors.get('light')
 var primaryArrows = new Arrows()
 
 primaryArrows.on('down', function () {
-    if(game.state === 'menu') menu.down()
+  if (game.state === 'menu') menu.down()
 })
 
-primaryArrows.on('up', function() {
-    if(game.state === 'menu') menu.up()
+primaryArrows.on('up', function () {
+  if (game.state === 'menu') menu.up()
 })
 
 var keyboard = new Keyboard()
 
 keyboard.on('keydown', function (key) {
-    if(key === '<enter>' && game.state === 'menu') menu.select()
+  if (game.state === 'menu' && (key === '<enter>' || key === '<space>')) menu.select()
+  if (game.state === 'gameover' && key === '<space>') {
+    game.init(0)
+    game.state = 'menu'
+  }
 })
 
-var players = [player, player2]
+game.init = function init (players) {
+  player.init()
+  player.arrows = primaryArrows
+  player.angle = 0 // degree
+  player.color = colors.get('dark')
+  player.inactiveColor = colors.get('darkInactive')
 
-game.init = function init(players) {
-    
-    player.init()
-    player.arrows = primaryArrows
-    player.angle = 0 // degree
-    player.color = colors.get('dark')
-    player.inactiveColor = colors.get('darkInactive')
+  player2.init()
+  player2.id = 2
+  player2.angle = 180
+  player2.color = colors.get('light')
+  player2.inactiveColor = colors.get('lightInactive')
+  player2.arrows = new Arrows()
+  player2.arrows.useWASD()
 
+  if (players === 0) {
+    player.setBot()
+    player.hideScore = true
+    player2.hideScore = true
+  }
+  if (players < 2) {
+    player2.setBot()
+  }
 
-    player2.init()
-    player2.id = 2
-    player2.angle = 180
-    player2.color = colors.get('light')
-    player2.inactiveColor = colors.get('lightInactive')
-    player2.arrows = new Arrows()
-    player2.arrows.useWASD()
-
-    if(players === 0) {
-        player.setBot()
-        player.hideScore = true
-        player2.hideScore = true
-    }
-    if(players < 2) {
-        player2.setBot()
-    }
-
-    ball.reset()
-    player2.active = true
-    ball.color = player2.color.clone()
+  ball.reset()
+  player2.active = true
+  ball.color = player2.color.clone()
 }
 game.init(0)
 
-function checkWinning(player, player2) {
-    if(player2.score === 10 || player.score === 10) {
-        game.state = 'gameover'
-        colors.random()
-    }
+function checkWinning (player, player2) {
+  if (player2.score === WINNING_SCORE || player.score === WINNING_SCORE) {
+    game.state = 'gameover'
+    colors.random()
+  }
 }
 
 game.state = 'menu' // 'menu', 'playing', 'gameover'
 
-game.on('update', function() {
- // player
-    player.update(circle, ball)
-    player2.update(circle, ball)
-// ball
-   ball.checkPlayerCollision(player, player2)
-   ball.checkPlayerCollision(player2, player)
-   ball.checkWallCollision(hexagon, [player, player2]) 
-   ball.update()
-if(game.state === 'playing') {
-   checkWinning(player, player2)
-}
-// Hexagon
-   hexagon.update()
-   menu.update()
+game.on('update', function () {
+  // player
+  player.update(circle, ball)
+  player2.update(circle, ball)
+  // ball
+  if (game.state !== 'gameover') {
+    ball.checkPlayerCollision(player, player2)
+    ball.checkPlayerCollision(player2, player)
+    ball.checkWallCollision(hexagon, [player, player2])
+    ball.update()
+  }
+  if (game.state === 'playing') {
+    checkWinning(player, player2)
+  }
+  // Hexagon
+  hexagon.update()
+  menu.update()
 })
 
-game.on('draw', function(c) {
-
-    //circle.draw(c)
-    // if(game.state !== 'menu') {
-        ball.draw(c)
-        player.draw(c)
-        player2.draw(c)
-    // }
-    hexagon.draw(c)
-    if(game.state === 'menu') {
-        menu.draw(c)
-    }
-    if(game.state === 'gameover') {
-        if(player.score > player2.score) {
-            alert('Dark player wins')
-            game.state = 'menu'
-        } else {
-            alert('Light player wins')
-            game.state = 'menu'
-        }
-        game.init(0)
-    }
+game.on('draw', function (c) {
+  // circle.draw(c)
+  if (game.state !== 'gameover') {
+    ball.draw(c)
+    player.draw(c)
+    player2.draw(c)
+  }
+  // }
+  hexagon.draw(c)
+  if (game.state === 'menu') {
+    menu.draw(c)
+  }
+  if (game.state === 'gameover') {
+    var darkPlayerWins = player.score > player2.score
+    var endText = darkPlayerWins ? 'Dark player wins' : 'Light player wins'
+    c.fillStyle = darkPlayerWins ? colors.get('dark').rgbString() : colors.get('light').rgbString()
+    c.font = "48px 'Open Sans', sans-serif"
+    var textSizes = c.measureText(endText)
+    c.fillText(endText, circle.x - textSizes.width / 2, circle.y + 20)
+  }
 })
 
-},{"./lib/ball.js":2,"./lib/circle.js":3,"./lib/colorscheme.js":4,"./lib/hexagon.js":7,"./lib/menu.js":8,"./lib/player.js":9,"crtrdg-arrows":15,"crtrdg-gameloop":17,"crtrdg-keyboard":22,"play-audio":25}],2:[function(require,module,exports){
+},{"./lib/ball.js":2,"./lib/circle.js":3,"./lib/colorscheme.js":4,"./lib/hexagon.js":7,"./lib/menu.js":8,"./lib/player.js":9,"crtrdg-arrows":15,"crtrdg-gameloop":16,"crtrdg-keyboard":17}],2:[function(require,module,exports){
 var Vec2 = require('vec2')
 var insidePolygon = require('point-in-polygon')
 var deg2rad = require('./helper/deg2rad.js')
 
 module.exports = Ball
 
-function Ball() {
-    this.radius = 2
-    this.startPoint = {x: 0, y: 0}
-    this.reset()
-    this.tail = []
+function Ball () {
+  this.radius = 2
+  this.startPoint = {x: 0, y: 0}
+  this.reset()
+  this.tail = []
 }
-Ball.prototype.reset = function() {
-    this.tail = []
-    this.x = this.startPoint.x
-    this.y = this.startPoint.y
-    this.speed = 2
-    this.direction = Math.random()*360
+Ball.prototype.reset = function () {
+  this.tail = []
+  this.x = this.startPoint.x
+  this.y = this.startPoint.y
+  this.speed = 2
+  this.direction = Math.random() * 360
 }
-Ball.prototype.update = function() {
-    var diff = 0.0009
-    this.tail.push([this.x * (1 - diff + Math.random() * diff * 2), this.y * (1 - diff + Math.random() * diff * 2)])
-    if(this.tail.length > 20) this.tail.shift()
-    var p = this.moveVector(this.direction)
-    this.x += p.x 
-    this.y += p.y
+Ball.prototype.update = function () {
+  var diff = 0.0009
+  this.tail.push([this.x * (1 - diff + Math.random() * diff * 2), this.y * (1 - diff + Math.random() * diff * 2)])
+  if (this.tail.length > 20) this.tail.shift()
+  var p = this.moveVector(this.direction)
+  this.x += p.x
+  this.y += p.y
 }
-Ball.prototype.moveVector = function(deg) {
+Ball.prototype.moveVector = function (deg) {
   var q = {}
   q.x = this.speed * Math.cos(deg * (Math.PI / 180))
   q.y = this.speed * Math.sin(deg * (Math.PI / 180))
   return q
 }
-Ball.prototype.moveBack = function() {
-    var p = this.moveVector(this.direction)
-    this.x -= p.x
-    this.y -= p.y
+Ball.prototype.moveBack = function () {
+  var p = this.moveVector(this.direction)
+  this.x -= p.x
+  this.y -= p.y
 }
 Ball.prototype.checkPlayerCollision = function (player, otherPlayer) {
-    var cx = this.x 
-    var cy = this.y
-    
-    var x = player.x 
-    var y = player.y 
-    var width = player.width 
-    var height = player.height 
-    var deg = player.angle
-    
-    var degRad =  deg2rad(deg)
-    
-    var ballVector = Vec2([cx, cy]).add( Vec2([this.radius, 0]).rotate(this.direction * (Math.PI / 180)) )
+  var cx = this.x
+  var cy = this.y
 
-   // https://www.npmjs.com/package/vec2 has a rotate function
-    var playerCentre = Vec2([x+width/2,y+height/2])
-    var playerVertices = []
-    playerVertices[0] = Vec2([-width/2,-height/2]).rotate(degRad).add(playerCentre)
-    playerVertices[1] = Vec2([+width/2,-height/2]).rotate(degRad).add(playerCentre)
-    playerVertices[2] = Vec2([+width/2,+height/2]).rotate(degRad).add(playerCentre)
-    playerVertices[3] = Vec2([-width/2,+height/2]).rotate(degRad).add(playerCentre)
-    
-    playerVertices = playerVertices.map(function(point){
-      return point.toArray()  
+  var x = player.x
+  var y = player.y
+  var width = player.width
+  var height = player.height
+  var deg = player.angle
+
+  var degRad = deg2rad(deg)
+
+  var ballVector = Vec2([cx, cy]).add(Vec2([this.radius, 0]).rotate(this.direction * (Math.PI / 180)))
+
+  // https://www.npmjs.com/package/vec2 has a rotate function
+  var playerCentre = Vec2([x + width / 2, y + height / 2])
+  var playerVertices = []
+  playerVertices[0] = Vec2([-width / 2, -height / 2]).rotate(degRad).add(playerCentre)
+  playerVertices[1] = Vec2([+width / 2, -height / 2]).rotate(degRad).add(playerCentre)
+  playerVertices[2] = Vec2([+width / 2, +height / 2]).rotate(degRad).add(playerCentre)
+  playerVertices[3] = Vec2([-width / 2, +height / 2]).rotate(degRad).add(playerCentre)
+
+  playerVertices = playerVertices.map(function (point) {
+    return point.toArray()
+  })
+
+  if (player.active && insidePolygon(ballVector.toArray(), playerVertices)) {
+    player.collide(otherPlayer)
+    this.color = player.color
+    this.moveBack()
+    this.direction = 180 - this.direction + 2 * player.angle
+    this.direction = this.direction % 360
+  }
+}
+
+Ball.prototype.checkWallCollision = function (hexagon, players) {
+  var cx = this.x
+  var cy = this.y
+  var angle = 3
+  var polygon = hexagon.polygon
+
+  var ballVector = Vec2([cx, cy]).add(Vec2([this.radius, 0]).rotate(this.direction * (Math.PI / 180)))
+
+  if (!insidePolygon(ballVector.toArray(), polygon)) {
+    this.moveBack()
+
+    if (insidePolygon(ballVector.toArray(), [polygon[0], [polygon[0][0], polygon[1][1]], polygon[1]])) {
+      angle = 30
+    }
+    if (insidePolygon(ballVector.toArray(), [polygon[1], [polygon[1][0], polygon[1][1] + 10], [polygon[2][0], polygon[2][1] + 10], polygon[2]])) {
+      angle = 90
+    }
+    if (insidePolygon(ballVector.toArray(), [polygon[2], [polygon[3][0], polygon[2][1]], polygon[3]])) {
+      angle = 150
+    }
+    if (insidePolygon(ballVector.toArray(), [polygon[3], [polygon[3][0], polygon[4][1]], polygon[4]])) {
+      angle = 210
+    }
+    if (insidePolygon(ballVector.toArray(), [polygon[4], [polygon[4][0], polygon[4][1] - 10], [polygon[5][0], polygon[5][1] - 10], polygon[5]])) {
+      angle = 270
+    }
+    if (insidePolygon(ballVector.toArray(), [polygon[5], [polygon[0][0], polygon[5][1]], polygon[0]])) {
+      angle = 330
+    }
+
+    players.forEach(function (player) {
+      if (!player.active) {
+        player.score++
+        hexagon.color = player.inactiveColor
+        hexagon.hitTime = 15
+      }
     })
-    
-    if(player.active && insidePolygon(ballVector.toArray(), playerVertices)) {
-        player.collide(otherPlayer)
-        this.color = player.color
-        this.moveBack()
-        this.direction = 180 - this.direction + 2* player.angle
-        this.direction = this.direction % 360
-    }
+
+    this.direction = 180 - this.direction + 2 * angle
+    this.direction = this.direction % 360
+  }
 }
 
-Ball.prototype.checkWallCollision = function (hexagon, players){
-    
-    var cx = this.x 
-    var cy = this.y
-    var angle =  3
-    var polygon = hexagon.polygon
-    
-    var ballVector = Vec2([cx, cy]).add( Vec2([this.radius, 0]).rotate(this.direction * (Math.PI / 180)) )
-    
-    if(!insidePolygon(ballVector.toArray(), polygon)) {
-        this.moveBack()
-        
-        if(insidePolygon(ballVector.toArray(), [polygon[0],  [polygon[0][0],polygon[1][1]], polygon[1]])){
-            angle = 30
-        }
-        if(insidePolygon(ballVector.toArray(), [polygon[1],  [polygon[1][0],polygon[1][1]+10], [polygon[2][0],polygon[2][1]+10], polygon[2]])){
-            angle = 90
-        }
-        if(insidePolygon(ballVector.toArray(), [polygon[2],  [polygon[3][0],polygon[2][1]], polygon[3]])){
-            angle = 150
-        }
-        if(insidePolygon(ballVector.toArray(), [polygon[3],  [polygon[3][0],polygon[4][1]], polygon[4]])){
-            angle = 210
-        }
-        if(insidePolygon(ballVector.toArray(), [polygon[4],  [polygon[4][0],polygon[4][1]-10], [polygon[5][0],polygon[5][1]-10], polygon[5]])){
-            angle = 270
-        }
-        if(insidePolygon(ballVector.toArray(), [polygon[5],  [polygon[0][0],polygon[5][1]], polygon[0]])){
-            angle = 330
-        }
-        
-        players.forEach(function(player) {
-            if(!player.active) {
-                player.score++
-                hexagon.color = player.inactiveColor
-                hexagon.hitTime = 15
-            }
-        })
-        
-        this.direction = 180 - this.direction + 2*angle
-        this.direction = this.direction % 360
-    }
-}
+Ball.prototype.draw = function (c) {
+  var radius = this.radius
+  var color = this.color.clone()
+  c.beginPath()
+  c.fillStyle = color.rgbString()
+  c.arc(this.x, this.y, radius, 0, 2 * Math.PI, false)
+  c.fill()
+  c.closePath()
 
-Ball.prototype.draw = function(c) {
-    var radius = this.radius
-    var color = this.color.clone()
+  // color.clearer(0.75)
+  var tail = this.tail
+
+  for (var i = tail.length - 1; i >= 0; i--) {
+    var p = tail[i]
     c.beginPath()
     c.fillStyle = color.rgbString()
-    c.arc(this.x, this.y, radius, 0, 2 * Math.PI, false)
+    c.arc(p[0], p[1], radius, 0, 2 * Math.PI, false)
+    // radius *= 0.95
+    radius = (-Math.exp((tail.length - i) / tail.length) + 3)
+
+    color.clearer(0.018)
     c.fill()
     c.closePath()
+  }
 
-    // color.clearer(0.75)
-    var tail = this.tail
-    
-    for(var i = tail.length - 1; i >= 0; i--) {
-        var p = tail[i]
-        c.beginPath()
-        c.fillStyle = color.rgbString()
-        c.arc(p[0], p[1], radius, 0, 2 * Math.PI, false)
-        // radius *= 0.95
-        radius = (-Math.exp((tail.length - i)/ tail.length) + 3)
-        
-        color.clearer(0.018)
-        c.fill()
-        c.closePath()
-    }
-
-
-    // c.restore()
+// c.restore()
 }
-},{"./helper/deg2rad.js":5,"point-in-polygon":34,"vec2":35}],3:[function(require,module,exports){
+
+},{"./helper/deg2rad.js":5,"point-in-polygon":21,"vec2":27}],3:[function(require,module,exports){
 module.exports = Circle
 
-function Circle(x, y) {
-    this.x = x || 200
-    this.y = y || 200
-    this.radius = 150
+function Circle (x, y) {
+  this.x = x || 200
+  this.y = y || 200
+  this.radius = 150
 }
 
-Circle.prototype.draw = function(c) {
-    c.beginPath()
-    c.arc(this.x, this.y, this.radius, 0, 2 * Math.PI, false)
-    c.lineWidth = 2
-    c.strokeStyle = 'white'
-    c.stroke()
-    c.closePath()
+Circle.prototype.draw = function (c) {
+  c.beginPath()
+  c.arc(this.x, this.y, this.radius, 0, 2 * Math.PI, false)
+  c.lineWidth = 2
+  c.strokeStyle = 'white'
+  c.stroke()
+  c.closePath()
 }
 
-Circle.prototype.getCoordinates = function(deg) {
+Circle.prototype.getCoordinates = function (deg) {
   var q = {}
   q.x = this.x + this.radius * Math.cos(deg * (Math.PI / 180))
   q.y = this.y + this.radius * Math.sin(deg * (Math.PI / 180))
@@ -310,650 +310,219 @@ var Color = require('color')
 
 // TODO: https://github.com/tmcw/relative-luminance
 
-function ColorScheme(hue) {
-    hue = hue || Math.round(Math.random() * 360)
-    this.hue = hue
-    this.colors = {
-        background: Color().hsl(hue, 50, 45),
-        light: Color().hsl(hue, 100, 83),
-        lightInactive: Color().hsl(hue, 55, 62),
-        dark: Color().hsl(hue, 100, 17),
-        darkInactive: Color().hsl(hue, 72, 29),
-        hexagon: Color().hsl(hue, 44, 50)
-    }
-    document.body.style.backgroundColor = this.colors.background.rgbString()
+function ColorScheme (hue) {
+  hue = hue || Math.round(Math.random() * 360)
+  this.hue = hue
+  this.colors = {
+    background: Color().hsl(hue, 50, 45),
+    light: Color().hsl(hue, 100, 83),
+    lightInactive: Color().hsl(hue, 55, 62),
+    dark: Color().hsl(hue, 100, 17),
+    darkInactive: Color().hsl(hue, 72, 29),
+    hexagon: Color().hsl(hue, 44, 50)
+  }
+  document.body.style.backgroundColor = this.colors.background.rgbString()
 }
 
-ColorScheme.prototype.get = function(name) {
-    return this.colors[name]
+ColorScheme.prototype.get = function (name) {
+  return this.colors[name]
 }
 
-ColorScheme.prototype.setHue = function(hue) {
-    this.hue = hue % 360
-    for(var color in this.colors) {
-        this.colors[color].hue(hue)
-    }
-    document.body.style.backgroundColor = this.colors.background.rgbString()
+ColorScheme.prototype.setHue = function (hue) {
+  this.hue = hue % 360
+  for (var color in this.colors) {
+    this.colors[color].hue(hue)
+  }
+  document.body.style.backgroundColor = this.colors.background.rgbString()
 }
 
-
-ColorScheme.prototype.random = function() {
-    this.setHue(Math.round(Math.random() * 360))
+ColorScheme.prototype.random = function () {
+  this.setHue(Math.round(Math.random() * 360))
 }
 
-ColorScheme.prototype.rotate = function(time) {
-    // this was for fun, but is actually quite subtle and nice
-    setInterval(function() {
-        this.setHue(++this.hue)
-    }.bind(this), time || 150)
+ColorScheme.prototype.rotate = function (time) {
+  // this was for fun, but is actually quite subtle and nice
+  setInterval(function () {
+    this.setHue(++this.hue)
+  }.bind(this), time || 150)
 }
-},{"color":10}],5:[function(require,module,exports){
-function deg2rad(deg) {
-    return deg * (Math.PI / 180)
+
+},{"color":14}],5:[function(require,module,exports){
+function deg2rad (deg) {
+  return deg * (Math.PI / 180)
 }
 
 module.exports = deg2rad
+
 },{}],6:[function(require,module,exports){
-function drawPolygon(c, polygon) {
-    c.beginPath()
-    c.moveTo(polygon[0][0], polygon[0][1]) 
-    for(var i = 1; i < polygon.length; i++) c.lineTo(polygon[i][0], polygon[i][1]) 
-    c.lineTo(polygon[0][0], polygon[0][1])
-    c.closePath()
+function drawPolygon (c, polygon) {
+  c.beginPath()
+  c.moveTo(polygon[0][0], polygon[0][1])
+  for (var i = 1; i < polygon.length; i++) c.lineTo(polygon[i][0], polygon[i][1])
+  c.lineTo(polygon[0][0], polygon[0][1])
+  c.closePath()
 }
 
 module.exports = drawPolygon
+
 },{}],7:[function(require,module,exports){
 var drawPolygon = require('./helper/drawpolygon.js')
 
 module.exports = Hexagon
 
-function Hexagon(baseColor, x, y, radius) {
-    this.baseColor = baseColor
+function Hexagon (baseColor, x, y, radius) {
+  this.baseColor = baseColor
+  this.color = this.baseColor
+  this.hitTime = 0 // for blinking
+  this.polygon = []
+  this.radius = radius
+  this.x = x
+  this.y = y
+  for (var i = 0; i < 6; i++)
+    this.polygon.push([this.radius * Math.cos(i * 1 / 3 * Math.PI) + x, this.radius * Math.sin(i * 1 / 3 * Math.PI) + y])
+}
+
+Hexagon.prototype.update = function () {
+  this.hitTime--
+  if (this.hitTime === 0) {
     this.color = this.baseColor
-    this.hitTime = 0 // for blinking
-    this.polygon = []
-    this.radius = radius
-    this.x = x
-    this.y = y
-    for(var i = 0; i < 6; i++)
-        this.polygon.push([this.radius * Math.cos(i * 1/3 * Math.PI) + x, this.radius * Math.sin(i * 1/3 * Math.PI) + y])
+  }
 }
 
-Hexagon.prototype.update = function() {
-    this.hitTime--
-    if(this.hitTime === 0) {
-        this.color = this.baseColor
-    }
-}
-
-Hexagon.prototype.draw = function(c) {
-    c.save()
-    c.beginPath()
-    drawPolygon(c, this.polygon)
-    c.strokeStyle = this.color.rgbString()
-    c.lineWidth = 5
-    c.stroke()
-    c.closePath()
-    c.restore()
+Hexagon.prototype.draw = function (c) {
+  c.save()
+  c.beginPath()
+  drawPolygon(c, this.polygon)
+  c.strokeStyle = this.color.rgbString()
+  c.lineWidth = 5
+  c.stroke()
+  c.closePath()
+  c.restore()
 }
 
 },{"./helper/drawpolygon.js":6}],8:[function(require,module,exports){
 module.exports = Menu
 
-function Menu(game, x, y){
-    this.items = ['1 Player', '2 Player']
-    this.selected = 0
-    this.x = x
-    this.y = y
-    this.frame = 0
-    this.game = game
+function Menu (game, x, y) {
+  this.items = ['1 Player', '2 Player']
+  this.selected = 0
+  this.x = x
+  this.y = y
+  this.frame = 0
+  this.game = game
 }
-Menu.prototype.update = function() {
-    this.frame++
-    if (this.frame >= 100) this.frame = 0
+Menu.prototype.update = function () {
+  this.frame++
+  if (this.frame >= 100) this.frame = 0
 }
-Menu.prototype.draw = function(c) {
-    this.items.forEach(function(item, i) {
-        c.fillStyle = (i === this.selected ? this.selectedColor : this.color).rgbString()
-        var size = i === this.selected ? (Math.sin(this.frame * (Math.PI / 50)) - 0.5) * 3 + 48 : 48
-        c.font = size + "px 'Open Sans', sans-serif"
-        var text = c.measureText(item)
-        c.fillText(item, this.x - text.width / 2, this.y + i * 80 - 20)
-    }.bind(this))
+Menu.prototype.draw = function (c) {
+  this.items.forEach(function (item, i) {
+    c.fillStyle = (i === this.selected ? this.selectedColor : this.color).rgbString()
+    var size = i === this.selected ? (Math.sin(this.frame * (Math.PI / 50)) - 0.5) * 3 + 48 : 48
+    c.font = size + "px 'Open Sans', sans-serif"
+    var text = c.measureText(item)
+    c.fillText(item, this.x - text.width / 2, this.y + i * 80 - 20)
+  }.bind(this))
 }
-Menu.prototype.up = function() {
-    this.selected--
-    if(this.selected < 0) this.selected = this.items.length - 1
+Menu.prototype.up = function () {
+  this.selected--
+  if (this.selected < 0) this.selected = this.items.length - 1
 }
-Menu.prototype.down = function() {
-    this.selected++
-    if(this.selected > this.items.length - 1) this.selected = 0
+Menu.prototype.down = function () {
+  this.selected++
+  if (this.selected > this.items.length - 1) this.selected = 0
 }
-Menu.prototype.select = function() {
-    this.game.state = "playing"
-    this.game.init(this.selected + 1)
+Menu.prototype.select = function () {
+  this.game.state = 'playing'
+  this.game.init(this.selected + 1)
 }
+
 },{}],9:[function(require,module,exports){
 var deg2rad = require('./helper/deg2rad.js')
 
 module.exports = Player
 
-function Player() {
-    this.width = 4
-    this.height = 40
-    this.active = false
-    this.id = 1
-    this.bot = false
-    this.init()
+function Player () {
+  this.width = 4
+  this.height = 40
+  this.active = false
+  this.id = 1
+  this.bot = false
+  this.init()
 }
-Player.prototype.init = function() {
-    this.score = 0
-    this.active = false
-    this.bot = false
-    this.hideScore = false
+Player.prototype.init = function () {
+  this.score = 0
+  this.active = false
+  this.bot = false
+  this.hideScore = false
 }
-Player.prototype.setBot = function() {
-    this.bot = true
+Player.prototype.setBot = function () {
+  this.bot = true
 }
-Player.prototype.collide = function(otherPlayer) {
-    // ball
-    otherPlayer.active = true
-    this.active = false
+Player.prototype.collide = function (otherPlayer) {
+  // ball
+  otherPlayer.active = true
+  this.active = false
 }
-Player.prototype.update = function(circle, ball) {
-  if(this.bot){
+Player.prototype.update = function (circle, ball) {
+  if (this.bot) {
     var botSpeed = 1.8
-    if(this.active) {
-         var l = circle.getCoordinates(this.angle-botSpeed)
-        var m = circle.getCoordinates(this.angle)
-        var r = circle.getCoordinates(this.angle+botSpeed)
-        if( distance(l, ball) > distance(m, ball) ){
-             if( distance(r, ball) < distance(m, ball) ){
-                this.angle = this.angle+botSpeed
-             }
-        }else{
-            if(distance(l, ball) >= distance(r, ball)){
-                this.angle = this.angle+botSpeed
-            }else{
-                this.angle = this.angle-botSpeed
-            }
-        }   
+    if (this.active) {
+      var l = circle.getCoordinates(this.angle - botSpeed)
+      var m = circle.getCoordinates(this.angle)
+      var r = circle.getCoordinates(this.angle + botSpeed)
+      if (distance(l, ball) > distance(m, ball)) {
+        if (distance(r, ball) < distance(m, ball)) {
+          this.angle = this.angle + botSpeed
+        }
+      } else {
+        if (distance(l, ball) >= distance(r, ball)) {
+          this.angle = this.angle + botSpeed
+        } else {
+          this.angle = this.angle - botSpeed
+        }
+      }
     }
-  }else{
-    if(this.arrows.isDown('left')) this.angle += 2
-    if(this.arrows.isDown('right')) this.angle -= 2
+  } else {
+    if (this.arrows.isDown('left')) this.angle += 2
+    if (this.arrows.isDown('right')) this.angle -= 2
   }
-  
+
   this.angle = this.angle % 360
 
   // update .x and .y
   var p = circle.getCoordinates(this.angle)
-  this.x =  p.x - (this.width/2)
-  this.y =  p.y - (this.height/2)
+  this.x = p.x - (this.width / 2)
+  this.y = p.y - (this.height / 2)
 }
-Player.prototype.draw = function(c) {
-    c.save()
-    c.beginPath()
-    c.translate(this.x + (this.width/2), this.y + (this.height/2))
-    c.rotate(deg2rad(this.angle))
-    c.rect(- (this.width/2), - (this.height/2),  this.width , this.height)
-    var color = this.color.clone()
-    // if(!this.active) color.alpha(0.25)
-    if(!this.active) color = this.inactiveColor 
-    c.fillStyle = color.rgbString()
-    c.fill()
-    c.restore()
-    c.closePath()
-    // score
-    if(!this.hideScore) {
-        c.fillStyle = this.color.rgbString()
-        c.font = "48px 'Open Sans', sans-serif" //'48px Verdana, Geneva, sans-serif'
-        c.fillText(this.score, 400, 150 + this.id * 100)   
-    }
+Player.prototype.draw = function (c) {
+  c.save()
+  c.beginPath()
+  c.translate(this.x + (this.width / 2), this.y + (this.height / 2))
+  c.rotate(deg2rad(this.angle))
+  c.rect(- (this.width / 2), - (this.height / 2), this.width , this.height)
+  var color = this.color.clone()
+  // if(!this.active) color.alpha(0.25)
+  if (!this.active) color = this.inactiveColor
+  c.fillStyle = color.rgbString()
+  c.fill()
+  c.restore()
+  c.closePath()
+  // score
+  if (!this.hideScore) {
+    c.fillStyle = this.color.rgbString()
+    c.font = "48px 'Open Sans', sans-serif" // '48px Verdana, Geneva, sans-serif'
+    c.fillText(this.score, 490  + (this.id - 1) * 400, 310)
+  }
 }
 
 // functions
 
-function distance(p1,p2){
-    return Math.sqrt(Math.pow((p1.x - p2.x), 2) + Math.pow((p1.y - p2.y), 2))
+function distance (p1, p2) {
+  return Math.sqrt(Math.pow((p1.x - p2.x), 2) + Math.pow((p1.y - p2.y), 2))
 }
+
 },{"./helper/deg2rad.js":5}],10:[function(require,module,exports){
-/* MIT license */
-var convert = require("color-convert"),
-    string = require("color-string");
-
-var Color = function(obj) {
-  if (obj instanceof Color) return obj;
-  if (! (this instanceof Color)) return new Color(obj);
-
-   this.values = {
-      rgb: [0, 0, 0],
-      hsl: [0, 0, 0],
-      hsv: [0, 0, 0],
-      hwb: [0, 0, 0],
-      cmyk: [0, 0, 0, 0],
-      alpha: 1
-   }
-
-   // parse Color() argument
-   if (typeof obj == "string") {
-      var vals = string.getRgba(obj);
-      if (vals) {
-         this.setValues("rgb", vals);
-      }
-      else if(vals = string.getHsla(obj)) {
-         this.setValues("hsl", vals);
-      }
-      else if(vals = string.getHwb(obj)) {
-         this.setValues("hwb", vals);
-      }
-      else {
-        throw new Error("Unable to parse color from string \"" + obj + "\"");
-      }
-   }
-   else if (typeof obj == "object") {
-      var vals = obj;
-      if(vals["r"] !== undefined || vals["red"] !== undefined) {
-         this.setValues("rgb", vals)
-      }
-      else if(vals["l"] !== undefined || vals["lightness"] !== undefined) {
-         this.setValues("hsl", vals)
-      }
-      else if(vals["v"] !== undefined || vals["value"] !== undefined) {
-         this.setValues("hsv", vals)
-      }
-      else if(vals["w"] !== undefined || vals["whiteness"] !== undefined) {
-         this.setValues("hwb", vals)
-      }
-      else if(vals["c"] !== undefined || vals["cyan"] !== undefined) {
-         this.setValues("cmyk", vals)
-      }
-      else {
-        throw new Error("Unable to parse color from object " + JSON.stringify(obj));
-      }
-   }
-}
-
-Color.prototype = {
-   rgb: function (vals) {
-      return this.setSpace("rgb", arguments);
-   },
-   hsl: function(vals) {
-      return this.setSpace("hsl", arguments);
-   },
-   hsv: function(vals) {
-      return this.setSpace("hsv", arguments);
-   },
-   hwb: function(vals) {
-      return this.setSpace("hwb", arguments);
-   },
-   cmyk: function(vals) {
-      return this.setSpace("cmyk", arguments);
-   },
-
-   rgbArray: function() {
-      return this.values.rgb;
-   },
-   hslArray: function() {
-      return this.values.hsl;
-   },
-   hsvArray: function() {
-      return this.values.hsv;
-   },
-   hwbArray: function() {
-      if (this.values.alpha !== 1) {
-        return this.values.hwb.concat([this.values.alpha])
-      }
-      return this.values.hwb;
-   },
-   cmykArray: function() {
-      return this.values.cmyk;
-   },
-   rgbaArray: function() {
-      var rgb = this.values.rgb;
-      return rgb.concat([this.values.alpha]);
-   },
-   hslaArray: function() {
-      var hsl = this.values.hsl;
-      return hsl.concat([this.values.alpha]);
-   },
-   alpha: function(val) {
-      if (val === undefined) {
-         return this.values.alpha;
-      }
-      this.setValues("alpha", val);
-      return this;
-   },
-
-   red: function(val) {
-      return this.setChannel("rgb", 0, val);
-   },
-   green: function(val) {
-      return this.setChannel("rgb", 1, val);
-   },
-   blue: function(val) {
-      return this.setChannel("rgb", 2, val);
-   },
-   hue: function(val) {
-      return this.setChannel("hsl", 0, val);
-   },
-   saturation: function(val) {
-      return this.setChannel("hsl", 1, val);
-   },
-   lightness: function(val) {
-      return this.setChannel("hsl", 2, val);
-   },
-   saturationv: function(val) {
-      return this.setChannel("hsv", 1, val);
-   },
-   whiteness: function(val) {
-      return this.setChannel("hwb", 1, val);
-   },
-   blackness: function(val) {
-      return this.setChannel("hwb", 2, val);
-   },
-   value: function(val) {
-      return this.setChannel("hsv", 2, val);
-   },
-   cyan: function(val) {
-      return this.setChannel("cmyk", 0, val);
-   },
-   magenta: function(val) {
-      return this.setChannel("cmyk", 1, val);
-   },
-   yellow: function(val) {
-      return this.setChannel("cmyk", 2, val);
-   },
-   black: function(val) {
-      return this.setChannel("cmyk", 3, val);
-   },
-
-   hexString: function() {
-      return string.hexString(this.values.rgb);
-   },
-   rgbString: function() {
-      return string.rgbString(this.values.rgb, this.values.alpha);
-   },
-   rgbaString: function() {
-      return string.rgbaString(this.values.rgb, this.values.alpha);
-   },
-   percentString: function() {
-      return string.percentString(this.values.rgb, this.values.alpha);
-   },
-   hslString: function() {
-      return string.hslString(this.values.hsl, this.values.alpha);
-   },
-   hslaString: function() {
-      return string.hslaString(this.values.hsl, this.values.alpha);
-   },
-   hwbString: function() {
-      return string.hwbString(this.values.hwb, this.values.alpha);
-   },
-   keyword: function() {
-      return string.keyword(this.values.rgb, this.values.alpha);
-   },
-
-   rgbNumber: function() {
-      return (this.values.rgb[0] << 16) | (this.values.rgb[1] << 8) | this.values.rgb[2];
-   },
-
-   luminosity: function() {
-      // http://www.w3.org/TR/WCAG20/#relativeluminancedef
-      var rgb = this.values.rgb;
-      var lum = [];
-      for (var i = 0; i < rgb.length; i++) {
-         var chan = rgb[i] / 255;
-         lum[i] = (chan <= 0.03928) ? chan / 12.92
-                  : Math.pow(((chan + 0.055) / 1.055), 2.4)
-      }
-      return 0.2126 * lum[0] + 0.7152 * lum[1] + 0.0722 * lum[2];
-   },
-
-   contrast: function(color2) {
-      // http://www.w3.org/TR/WCAG20/#contrast-ratiodef
-      var lum1 = this.luminosity();
-      var lum2 = color2.luminosity();
-      if (lum1 > lum2) {
-         return (lum1 + 0.05) / (lum2 + 0.05)
-      };
-      return (lum2 + 0.05) / (lum1 + 0.05);
-   },
-
-   level: function(color2) {
-     var contrastRatio = this.contrast(color2);
-     return (contrastRatio >= 7.1)
-       ? 'AAA'
-       : (contrastRatio >= 4.5)
-        ? 'AA'
-        : '';
-   },
-
-   dark: function() {
-      // YIQ equation from http://24ways.org/2010/calculating-color-contrast
-      var rgb = this.values.rgb,
-          yiq = (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000;
-      return yiq < 128;
-   },
-
-   light: function() {
-      return !this.dark();
-   },
-
-   negate: function() {
-      var rgb = []
-      for (var i = 0; i < 3; i++) {
-         rgb[i] = 255 - this.values.rgb[i];
-      }
-      this.setValues("rgb", rgb);
-      return this;
-   },
-
-   lighten: function(ratio) {
-      this.values.hsl[2] += this.values.hsl[2] * ratio;
-      this.setValues("hsl", this.values.hsl);
-      return this;
-   },
-
-   darken: function(ratio) {
-      this.values.hsl[2] -= this.values.hsl[2] * ratio;
-      this.setValues("hsl", this.values.hsl);
-      return this;
-   },
-
-   saturate: function(ratio) {
-      this.values.hsl[1] += this.values.hsl[1] * ratio;
-      this.setValues("hsl", this.values.hsl);
-      return this;
-   },
-
-   desaturate: function(ratio) {
-      this.values.hsl[1] -= this.values.hsl[1] * ratio;
-      this.setValues("hsl", this.values.hsl);
-      return this;
-   },
-
-   whiten: function(ratio) {
-      this.values.hwb[1] += this.values.hwb[1] * ratio;
-      this.setValues("hwb", this.values.hwb);
-      return this;
-   },
-
-   blacken: function(ratio) {
-      this.values.hwb[2] += this.values.hwb[2] * ratio;
-      this.setValues("hwb", this.values.hwb);
-      return this;
-   },
-
-   greyscale: function() {
-      var rgb = this.values.rgb;
-      // http://en.wikipedia.org/wiki/Grayscale#Converting_color_to_grayscale
-      var val = rgb[0] * 0.3 + rgb[1] * 0.59 + rgb[2] * 0.11;
-      this.setValues("rgb", [val, val, val]);
-      return this;
-   },
-
-   clearer: function(ratio) {
-      this.setValues("alpha", this.values.alpha - (this.values.alpha * ratio));
-      return this;
-   },
-
-   opaquer: function(ratio) {
-      this.setValues("alpha", this.values.alpha + (this.values.alpha * ratio));
-      return this;
-   },
-
-   rotate: function(degrees) {
-      var hue = this.values.hsl[0];
-      hue = (hue + degrees) % 360;
-      hue = hue < 0 ? 360 + hue : hue;
-      this.values.hsl[0] = hue;
-      this.setValues("hsl", this.values.hsl);
-      return this;
-   },
-
-   mix: function(color2, weight) {
-      weight = 1 - (weight == null ? 0.5 : weight);
-
-      // algorithm from Sass's mix(). Ratio of first color in mix is
-      // determined by the alphas of both colors and the weight
-      var t1 = weight * 2 - 1,
-          d = this.alpha() - color2.alpha();
-
-      var weight1 = (((t1 * d == -1) ? t1 : (t1 + d) / (1 + t1 * d)) + 1) / 2;
-      var weight2 = 1 - weight1;
-
-      var rgb = this.rgbArray();
-      var rgb2 = color2.rgbArray();
-
-      for (var i = 0; i < rgb.length; i++) {
-         rgb[i] = rgb[i] * weight1 + rgb2[i] * weight2;
-      }
-      this.setValues("rgb", rgb);
-
-      var alpha = this.alpha() * weight + color2.alpha() * (1 - weight);
-      this.setValues("alpha", alpha);
-
-      return this;
-   },
-
-   toJSON: function() {
-     return this.rgb();
-   },
-
-   clone: function() {
-     return new Color(this.rgb());
-   }
-}
-
-
-Color.prototype.getValues = function(space) {
-   var vals = {};
-   for (var i = 0; i < space.length; i++) {
-      vals[space.charAt(i)] = this.values[space][i];
-   }
-   if (this.values.alpha != 1) {
-      vals["a"] = this.values.alpha;
-   }
-   // {r: 255, g: 255, b: 255, a: 0.4}
-   return vals;
-}
-
-Color.prototype.setValues = function(space, vals) {
-   var spaces = {
-      "rgb": ["red", "green", "blue"],
-      "hsl": ["hue", "saturation", "lightness"],
-      "hsv": ["hue", "saturation", "value"],
-      "hwb": ["hue", "whiteness", "blackness"],
-      "cmyk": ["cyan", "magenta", "yellow", "black"]
-   };
-
-   var maxes = {
-      "rgb": [255, 255, 255],
-      "hsl": [360, 100, 100],
-      "hsv": [360, 100, 100],
-      "hwb": [360, 100, 100],
-      "cmyk": [100, 100, 100, 100]
-   };
-
-   var alpha = 1;
-   if (space == "alpha") {
-      alpha = vals;
-   }
-   else if (vals.length) {
-      // [10, 10, 10]
-      this.values[space] = vals.slice(0, space.length);
-      alpha = vals[space.length];
-   }
-   else if (vals[space.charAt(0)] !== undefined) {
-      // {r: 10, g: 10, b: 10}
-      for (var i = 0; i < space.length; i++) {
-        this.values[space][i] = vals[space.charAt(i)];
-      }
-      alpha = vals.a;
-   }
-   else if (vals[spaces[space][0]] !== undefined) {
-      // {red: 10, green: 10, blue: 10}
-      var chans = spaces[space];
-      for (var i = 0; i < space.length; i++) {
-        this.values[space][i] = vals[chans[i]];
-      }
-      alpha = vals.alpha;
-   }
-   this.values.alpha = Math.max(0, Math.min(1, (alpha !== undefined ? alpha : this.values.alpha) ));
-   if (space == "alpha") {
-      return;
-   }
-
-   // cap values of the space prior converting all values
-   for (var i = 0; i < space.length; i++) {
-      var capped = Math.max(0, Math.min(maxes[space][i], this.values[space][i]));
-      this.values[space][i] = Math.round(capped);
-   }
-
-   // convert to all the other color spaces
-   for (var sname in spaces) {
-      if (sname != space) {
-         this.values[sname] = convert[space][sname](this.values[space])
-      }
-
-      // cap values
-      for (var i = 0; i < sname.length; i++) {
-         var capped = Math.max(0, Math.min(maxes[sname][i], this.values[sname][i]));
-         this.values[sname][i] = Math.round(capped);
-      }
-   }
-   return true;
-}
-
-Color.prototype.setSpace = function(space, args) {
-   var vals = args[0];
-   if (vals === undefined) {
-      // color.rgb()
-      return this.getValues(space);
-   }
-   // color.rgb(10, 10, 10)
-   if (typeof vals == "number") {
-      vals = Array.prototype.slice.call(args);
-   }
-   this.setValues(space, vals);
-   return this;
-}
-
-Color.prototype.setChannel = function(space, index, val) {
-   if (val === undefined) {
-      // color.red()
-      return this.values[space][index];
-   }
-   // color.red(100)
-   this.values[space][index] = val;
-   this.setValues(space, this.values[space]);
-   return this;
-}
-
-module.exports = Color;
-
-},{"color-convert":12,"color-string":13}],11:[function(require,module,exports){
 /* MIT license */
 
 module.exports = {
@@ -1194,6 +763,13 @@ function hsl2hsv(hsl) {
       s = hsl[1] / 100,
       l = hsl[2] / 100,
       sv, v;
+
+  if(l === 0) {
+      // no need to do calc on black
+      // also avoids divide by 0 error
+      return [0, 0, 0];
+  }
+
   l *= 2;
   s *= (l <= 1) ? l : 2 - l;
   v = (l + s) / 2;
@@ -1646,7 +1222,7 @@ for (var key in cssKeywords) {
   reverseKeywords[JSON.stringify(cssKeywords[key])] = key;
 }
 
-},{}],12:[function(require,module,exports){
+},{}],11:[function(require,module,exports){
 var conversions = require("./conversions");
 
 var convert = function() {
@@ -1739,7 +1315,158 @@ Converter.prototype.getValues = function(space) {
 });
 
 module.exports = convert;
-},{"./conversions":11}],13:[function(require,module,exports){
+},{"./conversions":10}],12:[function(require,module,exports){
+module.exports = {
+	"aliceblue": [240, 248, 255],
+	"antiquewhite": [250, 235, 215],
+	"aqua": [0, 255, 255],
+	"aquamarine": [127, 255, 212],
+	"azure": [240, 255, 255],
+	"beige": [245, 245, 220],
+	"bisque": [255, 228, 196],
+	"black": [0, 0, 0],
+	"blanchedalmond": [255, 235, 205],
+	"blue": [0, 0, 255],
+	"blueviolet": [138, 43, 226],
+	"brown": [165, 42, 42],
+	"burlywood": [222, 184, 135],
+	"cadetblue": [95, 158, 160],
+	"chartreuse": [127, 255, 0],
+	"chocolate": [210, 105, 30],
+	"coral": [255, 127, 80],
+	"cornflowerblue": [100, 149, 237],
+	"cornsilk": [255, 248, 220],
+	"crimson": [220, 20, 60],
+	"cyan": [0, 255, 255],
+	"darkblue": [0, 0, 139],
+	"darkcyan": [0, 139, 139],
+	"darkgoldenrod": [184, 134, 11],
+	"darkgray": [169, 169, 169],
+	"darkgreen": [0, 100, 0],
+	"darkgrey": [169, 169, 169],
+	"darkkhaki": [189, 183, 107],
+	"darkmagenta": [139, 0, 139],
+	"darkolivegreen": [85, 107, 47],
+	"darkorange": [255, 140, 0],
+	"darkorchid": [153, 50, 204],
+	"darkred": [139, 0, 0],
+	"darksalmon": [233, 150, 122],
+	"darkseagreen": [143, 188, 143],
+	"darkslateblue": [72, 61, 139],
+	"darkslategray": [47, 79, 79],
+	"darkslategrey": [47, 79, 79],
+	"darkturquoise": [0, 206, 209],
+	"darkviolet": [148, 0, 211],
+	"deeppink": [255, 20, 147],
+	"deepskyblue": [0, 191, 255],
+	"dimgray": [105, 105, 105],
+	"dimgrey": [105, 105, 105],
+	"dodgerblue": [30, 144, 255],
+	"firebrick": [178, 34, 34],
+	"floralwhite": [255, 250, 240],
+	"forestgreen": [34, 139, 34],
+	"fuchsia": [255, 0, 255],
+	"gainsboro": [220, 220, 220],
+	"ghostwhite": [248, 248, 255],
+	"gold": [255, 215, 0],
+	"goldenrod": [218, 165, 32],
+	"gray": [128, 128, 128],
+	"green": [0, 128, 0],
+	"greenyellow": [173, 255, 47],
+	"grey": [128, 128, 128],
+	"honeydew": [240, 255, 240],
+	"hotpink": [255, 105, 180],
+	"indianred": [205, 92, 92],
+	"indigo": [75, 0, 130],
+	"ivory": [255, 255, 240],
+	"khaki": [240, 230, 140],
+	"lavender": [230, 230, 250],
+	"lavenderblush": [255, 240, 245],
+	"lawngreen": [124, 252, 0],
+	"lemonchiffon": [255, 250, 205],
+	"lightblue": [173, 216, 230],
+	"lightcoral": [240, 128, 128],
+	"lightcyan": [224, 255, 255],
+	"lightgoldenrodyellow": [250, 250, 210],
+	"lightgray": [211, 211, 211],
+	"lightgreen": [144, 238, 144],
+	"lightgrey": [211, 211, 211],
+	"lightpink": [255, 182, 193],
+	"lightsalmon": [255, 160, 122],
+	"lightseagreen": [32, 178, 170],
+	"lightskyblue": [135, 206, 250],
+	"lightslategray": [119, 136, 153],
+	"lightslategrey": [119, 136, 153],
+	"lightsteelblue": [176, 196, 222],
+	"lightyellow": [255, 255, 224],
+	"lime": [0, 255, 0],
+	"limegreen": [50, 205, 50],
+	"linen": [250, 240, 230],
+	"magenta": [255, 0, 255],
+	"maroon": [128, 0, 0],
+	"mediumaquamarine": [102, 205, 170],
+	"mediumblue": [0, 0, 205],
+	"mediumorchid": [186, 85, 211],
+	"mediumpurple": [147, 112, 219],
+	"mediumseagreen": [60, 179, 113],
+	"mediumslateblue": [123, 104, 238],
+	"mediumspringgreen": [0, 250, 154],
+	"mediumturquoise": [72, 209, 204],
+	"mediumvioletred": [199, 21, 133],
+	"midnightblue": [25, 25, 112],
+	"mintcream": [245, 255, 250],
+	"mistyrose": [255, 228, 225],
+	"moccasin": [255, 228, 181],
+	"navajowhite": [255, 222, 173],
+	"navy": [0, 0, 128],
+	"oldlace": [253, 245, 230],
+	"olive": [128, 128, 0],
+	"olivedrab": [107, 142, 35],
+	"orange": [255, 165, 0],
+	"orangered": [255, 69, 0],
+	"orchid": [218, 112, 214],
+	"palegoldenrod": [238, 232, 170],
+	"palegreen": [152, 251, 152],
+	"paleturquoise": [175, 238, 238],
+	"palevioletred": [219, 112, 147],
+	"papayawhip": [255, 239, 213],
+	"peachpuff": [255, 218, 185],
+	"peru": [205, 133, 63],
+	"pink": [255, 192, 203],
+	"plum": [221, 160, 221],
+	"powderblue": [176, 224, 230],
+	"purple": [128, 0, 128],
+	"rebeccapurple": [102, 51, 153],
+	"red": [255, 0, 0],
+	"rosybrown": [188, 143, 143],
+	"royalblue": [65, 105, 225],
+	"saddlebrown": [139, 69, 19],
+	"salmon": [250, 128, 114],
+	"sandybrown": [244, 164, 96],
+	"seagreen": [46, 139, 87],
+	"seashell": [255, 245, 238],
+	"sienna": [160, 82, 45],
+	"silver": [192, 192, 192],
+	"skyblue": [135, 206, 235],
+	"slateblue": [106, 90, 205],
+	"slategray": [112, 128, 144],
+	"slategrey": [112, 128, 144],
+	"snow": [255, 250, 250],
+	"springgreen": [0, 255, 127],
+	"steelblue": [70, 130, 180],
+	"tan": [210, 180, 140],
+	"teal": [0, 128, 128],
+	"thistle": [216, 191, 216],
+	"tomato": [255, 99, 71],
+	"turquoise": [64, 224, 208],
+	"violet": [238, 130, 238],
+	"wheat": [245, 222, 179],
+	"white": [255, 255, 255],
+	"whitesmoke": [245, 245, 245],
+	"yellow": [255, 255, 0],
+	"yellowgreen": [154, 205, 50]
+};
+},{}],13:[function(require,module,exports){
 /* MIT license */
 var colorNames = require('color-name');
 
@@ -1962,158 +1689,442 @@ for (var name in colorNames) {
    reverseNames[colorNames[name]] = name;
 }
 
-},{"color-name":14}],14:[function(require,module,exports){
-module.exports={
-	"aliceblue": [240, 248, 255],
-	"antiquewhite": [250, 235, 215],
-	"aqua": [0, 255, 255],
-	"aquamarine": [127, 255, 212],
-	"azure": [240, 255, 255],
-	"beige": [245, 245, 220],
-	"bisque": [255, 228, 196],
-	"black": [0, 0, 0],
-	"blanchedalmond": [255, 235, 205],
-	"blue": [0, 0, 255],
-	"blueviolet": [138, 43, 226],
-	"brown": [165, 42, 42],
-	"burlywood": [222, 184, 135],
-	"cadetblue": [95, 158, 160],
-	"chartreuse": [127, 255, 0],
-	"chocolate": [210, 105, 30],
-	"coral": [255, 127, 80],
-	"cornflowerblue": [100, 149, 237],
-	"cornsilk": [255, 248, 220],
-	"crimson": [220, 20, 60],
-	"cyan": [0, 255, 255],
-	"darkblue": [0, 0, 139],
-	"darkcyan": [0, 139, 139],
-	"darkgoldenrod": [184, 134, 11],
-	"darkgray": [169, 169, 169],
-	"darkgreen": [0, 100, 0],
-	"darkgrey": [169, 169, 169],
-	"darkkhaki": [189, 183, 107],
-	"darkmagenta": [139, 0, 139],
-	"darkolivegreen": [85, 107, 47],
-	"darkorange": [255, 140, 0],
-	"darkorchid": [153, 50, 204],
-	"darkred": [139, 0, 0],
-	"darksalmon": [233, 150, 122],
-	"darkseagreen": [143, 188, 143],
-	"darkslateblue": [72, 61, 139],
-	"darkslategray": [47, 79, 79],
-	"darkslategrey": [47, 79, 79],
-	"darkturquoise": [0, 206, 209],
-	"darkviolet": [148, 0, 211],
-	"deeppink": [255, 20, 147],
-	"deepskyblue": [0, 191, 255],
-	"dimgray": [105, 105, 105],
-	"dimgrey": [105, 105, 105],
-	"dodgerblue": [30, 144, 255],
-	"firebrick": [178, 34, 34],
-	"floralwhite": [255, 250, 240],
-	"forestgreen": [34, 139, 34],
-	"fuchsia": [255, 0, 255],
-	"gainsboro": [220, 220, 220],
-	"ghostwhite": [248, 248, 255],
-	"gold": [255, 215, 0],
-	"goldenrod": [218, 165, 32],
-	"gray": [128, 128, 128],
-	"green": [0, 128, 0],
-	"greenyellow": [173, 255, 47],
-	"grey": [128, 128, 128],
-	"honeydew": [240, 255, 240],
-	"hotpink": [255, 105, 180],
-	"indianred": [205, 92, 92],
-	"indigo": [75, 0, 130],
-	"ivory": [255, 255, 240],
-	"khaki": [240, 230, 140],
-	"lavender": [230, 230, 250],
-	"lavenderblush": [255, 240, 245],
-	"lawngreen": [124, 252, 0],
-	"lemonchiffon": [255, 250, 205],
-	"lightblue": [173, 216, 230],
-	"lightcoral": [240, 128, 128],
-	"lightcyan": [224, 255, 255],
-	"lightgoldenrodyellow": [250, 250, 210],
-	"lightgray": [211, 211, 211],
-	"lightgreen": [144, 238, 144],
-	"lightgrey": [211, 211, 211],
-	"lightpink": [255, 182, 193],
-	"lightsalmon": [255, 160, 122],
-	"lightseagreen": [32, 178, 170],
-	"lightskyblue": [135, 206, 250],
-	"lightslategray": [119, 136, 153],
-	"lightslategrey": [119, 136, 153],
-	"lightsteelblue": [176, 196, 222],
-	"lightyellow": [255, 255, 224],
-	"lime": [0, 255, 0],
-	"limegreen": [50, 205, 50],
-	"linen": [250, 240, 230],
-	"magenta": [255, 0, 255],
-	"maroon": [128, 0, 0],
-	"mediumaquamarine": [102, 205, 170],
-	"mediumblue": [0, 0, 205],
-	"mediumorchid": [186, 85, 211],
-	"mediumpurple": [147, 112, 219],
-	"mediumseagreen": [60, 179, 113],
-	"mediumslateblue": [123, 104, 238],
-	"mediumspringgreen": [0, 250, 154],
-	"mediumturquoise": [72, 209, 204],
-	"mediumvioletred": [199, 21, 133],
-	"midnightblue": [25, 25, 112],
-	"mintcream": [245, 255, 250],
-	"mistyrose": [255, 228, 225],
-	"moccasin": [255, 228, 181],
-	"navajowhite": [255, 222, 173],
-	"navy": [0, 0, 128],
-	"oldlace": [253, 245, 230],
-	"olive": [128, 128, 0],
-	"olivedrab": [107, 142, 35],
-	"orange": [255, 165, 0],
-	"orangered": [255, 69, 0],
-	"orchid": [218, 112, 214],
-	"palegoldenrod": [238, 232, 170],
-	"palegreen": [152, 251, 152],
-	"paleturquoise": [175, 238, 238],
-	"palevioletred": [219, 112, 147],
-	"papayawhip": [255, 239, 213],
-	"peachpuff": [255, 218, 185],
-	"peru": [205, 133, 63],
-	"pink": [255, 192, 203],
-	"plum": [221, 160, 221],
-	"powderblue": [176, 224, 230],
-	"purple": [128, 0, 128],
-	"rebeccapurple": [102, 51, 153],
-	"red": [255, 0, 0],
-	"rosybrown": [188, 143, 143],
-	"royalblue": [65, 105, 225],
-	"saddlebrown": [139, 69, 19],
-	"salmon": [250, 128, 114],
-	"sandybrown": [244, 164, 96],
-	"seagreen": [46, 139, 87],
-	"seashell": [255, 245, 238],
-	"sienna": [160, 82, 45],
-	"silver": [192, 192, 192],
-	"skyblue": [135, 206, 235],
-	"slateblue": [106, 90, 205],
-	"slategray": [112, 128, 144],
-	"slategrey": [112, 128, 144],
-	"snow": [255, 250, 250],
-	"springgreen": [0, 255, 127],
-	"steelblue": [70, 130, 180],
-	"tan": [210, 180, 140],
-	"teal": [0, 128, 128],
-	"thistle": [216, 191, 216],
-	"tomato": [255, 99, 71],
-	"turquoise": [64, 224, 208],
-	"violet": [238, 130, 238],
-	"wheat": [245, 222, 179],
-	"white": [255, 255, 255],
-	"whitesmoke": [245, 245, 245],
-	"yellow": [255, 255, 0],
-	"yellowgreen": [154, 205, 50]
+},{"color-name":12}],14:[function(require,module,exports){
+/* MIT license */
+var convert = require("color-convert"),
+    string = require("color-string");
+
+var Color = function(obj) {
+  if (obj instanceof Color) return obj;
+  if (! (this instanceof Color)) return new Color(obj);
+
+   this.values = {
+      rgb: [0, 0, 0],
+      hsl: [0, 0, 0],
+      hsv: [0, 0, 0],
+      hwb: [0, 0, 0],
+      cmyk: [0, 0, 0, 0],
+      alpha: 1
+   }
+
+   // parse Color() argument
+   if (typeof obj == "string") {
+      var vals = string.getRgba(obj);
+      if (vals) {
+         this.setValues("rgb", vals);
+      }
+      else if(vals = string.getHsla(obj)) {
+         this.setValues("hsl", vals);
+      }
+      else if(vals = string.getHwb(obj)) {
+         this.setValues("hwb", vals);
+      }
+      else {
+        throw new Error("Unable to parse color from string \"" + obj + "\"");
+      }
+   }
+   else if (typeof obj == "object") {
+      var vals = obj;
+      if(vals["r"] !== undefined || vals["red"] !== undefined) {
+         this.setValues("rgb", vals)
+      }
+      else if(vals["l"] !== undefined || vals["lightness"] !== undefined) {
+         this.setValues("hsl", vals)
+      }
+      else if(vals["v"] !== undefined || vals["value"] !== undefined) {
+         this.setValues("hsv", vals)
+      }
+      else if(vals["w"] !== undefined || vals["whiteness"] !== undefined) {
+         this.setValues("hwb", vals)
+      }
+      else if(vals["c"] !== undefined || vals["cyan"] !== undefined) {
+         this.setValues("cmyk", vals)
+      }
+      else {
+        throw new Error("Unable to parse color from object " + JSON.stringify(obj));
+      }
+   }
 }
-},{}],15:[function(require,module,exports){
+
+Color.prototype = {
+   rgb: function (vals) {
+      return this.setSpace("rgb", arguments);
+   },
+   hsl: function(vals) {
+      return this.setSpace("hsl", arguments);
+   },
+   hsv: function(vals) {
+      return this.setSpace("hsv", arguments);
+   },
+   hwb: function(vals) {
+      return this.setSpace("hwb", arguments);
+   },
+   cmyk: function(vals) {
+      return this.setSpace("cmyk", arguments);
+   },
+
+   rgbArray: function() {
+      return this.values.rgb;
+   },
+   hslArray: function() {
+      return this.values.hsl;
+   },
+   hsvArray: function() {
+      return this.values.hsv;
+   },
+   hwbArray: function() {
+      if (this.values.alpha !== 1) {
+        return this.values.hwb.concat([this.values.alpha])
+      }
+      return this.values.hwb;
+   },
+   cmykArray: function() {
+      return this.values.cmyk;
+   },
+   rgbaArray: function() {
+      var rgb = this.values.rgb;
+      return rgb.concat([this.values.alpha]);
+   },
+   hslaArray: function() {
+      var hsl = this.values.hsl;
+      return hsl.concat([this.values.alpha]);
+   },
+   alpha: function(val) {
+      if (val === undefined) {
+         return this.values.alpha;
+      }
+      this.setValues("alpha", val);
+      return this;
+   },
+
+   red: function(val) {
+      return this.setChannel("rgb", 0, val);
+   },
+   green: function(val) {
+      return this.setChannel("rgb", 1, val);
+   },
+   blue: function(val) {
+      return this.setChannel("rgb", 2, val);
+   },
+   hue: function(val) {
+      return this.setChannel("hsl", 0, val);
+   },
+   saturation: function(val) {
+      return this.setChannel("hsl", 1, val);
+   },
+   lightness: function(val) {
+      return this.setChannel("hsl", 2, val);
+   },
+   saturationv: function(val) {
+      return this.setChannel("hsv", 1, val);
+   },
+   whiteness: function(val) {
+      return this.setChannel("hwb", 1, val);
+   },
+   blackness: function(val) {
+      return this.setChannel("hwb", 2, val);
+   },
+   value: function(val) {
+      return this.setChannel("hsv", 2, val);
+   },
+   cyan: function(val) {
+      return this.setChannel("cmyk", 0, val);
+   },
+   magenta: function(val) {
+      return this.setChannel("cmyk", 1, val);
+   },
+   yellow: function(val) {
+      return this.setChannel("cmyk", 2, val);
+   },
+   black: function(val) {
+      return this.setChannel("cmyk", 3, val);
+   },
+
+   hexString: function() {
+      return string.hexString(this.values.rgb);
+   },
+   rgbString: function() {
+      return string.rgbString(this.values.rgb, this.values.alpha);
+   },
+   rgbaString: function() {
+      return string.rgbaString(this.values.rgb, this.values.alpha);
+   },
+   percentString: function() {
+      return string.percentString(this.values.rgb, this.values.alpha);
+   },
+   hslString: function() {
+      return string.hslString(this.values.hsl, this.values.alpha);
+   },
+   hslaString: function() {
+      return string.hslaString(this.values.hsl, this.values.alpha);
+   },
+   hwbString: function() {
+      return string.hwbString(this.values.hwb, this.values.alpha);
+   },
+   keyword: function() {
+      return string.keyword(this.values.rgb, this.values.alpha);
+   },
+
+   rgbNumber: function() {
+      return (this.values.rgb[0] << 16) | (this.values.rgb[1] << 8) | this.values.rgb[2];
+   },
+
+   luminosity: function() {
+      // http://www.w3.org/TR/WCAG20/#relativeluminancedef
+      var rgb = this.values.rgb;
+      var lum = [];
+      for (var i = 0; i < rgb.length; i++) {
+         var chan = rgb[i] / 255;
+         lum[i] = (chan <= 0.03928) ? chan / 12.92
+                  : Math.pow(((chan + 0.055) / 1.055), 2.4)
+      }
+      return 0.2126 * lum[0] + 0.7152 * lum[1] + 0.0722 * lum[2];
+   },
+
+   contrast: function(color2) {
+      // http://www.w3.org/TR/WCAG20/#contrast-ratiodef
+      var lum1 = this.luminosity();
+      var lum2 = color2.luminosity();
+      if (lum1 > lum2) {
+         return (lum1 + 0.05) / (lum2 + 0.05)
+      };
+      return (lum2 + 0.05) / (lum1 + 0.05);
+   },
+
+   level: function(color2) {
+     var contrastRatio = this.contrast(color2);
+     return (contrastRatio >= 7.1)
+       ? 'AAA'
+       : (contrastRatio >= 4.5)
+        ? 'AA'
+        : '';
+   },
+
+   dark: function() {
+      // YIQ equation from http://24ways.org/2010/calculating-color-contrast
+      var rgb = this.values.rgb,
+          yiq = (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000;
+      return yiq < 128;
+   },
+
+   light: function() {
+      return !this.dark();
+   },
+
+   negate: function() {
+      var rgb = []
+      for (var i = 0; i < 3; i++) {
+         rgb[i] = 255 - this.values.rgb[i];
+      }
+      this.setValues("rgb", rgb);
+      return this;
+   },
+
+   lighten: function(ratio) {
+      this.values.hsl[2] += this.values.hsl[2] * ratio;
+      this.setValues("hsl", this.values.hsl);
+      return this;
+   },
+
+   darken: function(ratio) {
+      this.values.hsl[2] -= this.values.hsl[2] * ratio;
+      this.setValues("hsl", this.values.hsl);
+      return this;
+   },
+
+   saturate: function(ratio) {
+      this.values.hsl[1] += this.values.hsl[1] * ratio;
+      this.setValues("hsl", this.values.hsl);
+      return this;
+   },
+
+   desaturate: function(ratio) {
+      this.values.hsl[1] -= this.values.hsl[1] * ratio;
+      this.setValues("hsl", this.values.hsl);
+      return this;
+   },
+
+   whiten: function(ratio) {
+      this.values.hwb[1] += this.values.hwb[1] * ratio;
+      this.setValues("hwb", this.values.hwb);
+      return this;
+   },
+
+   blacken: function(ratio) {
+      this.values.hwb[2] += this.values.hwb[2] * ratio;
+      this.setValues("hwb", this.values.hwb);
+      return this;
+   },
+
+   greyscale: function() {
+      var rgb = this.values.rgb;
+      // http://en.wikipedia.org/wiki/Grayscale#Converting_color_to_grayscale
+      var val = rgb[0] * 0.3 + rgb[1] * 0.59 + rgb[2] * 0.11;
+      this.setValues("rgb", [val, val, val]);
+      return this;
+   },
+
+   clearer: function(ratio) {
+      this.setValues("alpha", this.values.alpha - (this.values.alpha * ratio));
+      return this;
+   },
+
+   opaquer: function(ratio) {
+      this.setValues("alpha", this.values.alpha + (this.values.alpha * ratio));
+      return this;
+   },
+
+   rotate: function(degrees) {
+      var hue = this.values.hsl[0];
+      hue = (hue + degrees) % 360;
+      hue = hue < 0 ? 360 + hue : hue;
+      this.values.hsl[0] = hue;
+      this.setValues("hsl", this.values.hsl);
+      return this;
+   },
+
+   mix: function(color2, weight) {
+      weight = 1 - (weight == null ? 0.5 : weight);
+
+      // algorithm from Sass's mix(). Ratio of first color in mix is
+      // determined by the alphas of both colors and the weight
+      var t1 = weight * 2 - 1,
+          d = this.alpha() - color2.alpha();
+
+      var weight1 = (((t1 * d == -1) ? t1 : (t1 + d) / (1 + t1 * d)) + 1) / 2;
+      var weight2 = 1 - weight1;
+
+      var rgb = this.rgbArray();
+      var rgb2 = color2.rgbArray();
+
+      for (var i = 0; i < rgb.length; i++) {
+         rgb[i] = rgb[i] * weight1 + rgb2[i] * weight2;
+      }
+      this.setValues("rgb", rgb);
+
+      var alpha = this.alpha() * weight + color2.alpha() * (1 - weight);
+      this.setValues("alpha", alpha);
+
+      return this;
+   },
+
+   toJSON: function() {
+     return this.rgb();
+   },
+
+   clone: function() {
+     return new Color(this.rgb());
+   }
+}
+
+
+Color.prototype.getValues = function(space) {
+   var vals = {};
+   for (var i = 0; i < space.length; i++) {
+      vals[space.charAt(i)] = this.values[space][i];
+   }
+   if (this.values.alpha != 1) {
+      vals["a"] = this.values.alpha;
+   }
+   // {r: 255, g: 255, b: 255, a: 0.4}
+   return vals;
+}
+
+Color.prototype.setValues = function(space, vals) {
+   var spaces = {
+      "rgb": ["red", "green", "blue"],
+      "hsl": ["hue", "saturation", "lightness"],
+      "hsv": ["hue", "saturation", "value"],
+      "hwb": ["hue", "whiteness", "blackness"],
+      "cmyk": ["cyan", "magenta", "yellow", "black"]
+   };
+
+   var maxes = {
+      "rgb": [255, 255, 255],
+      "hsl": [360, 100, 100],
+      "hsv": [360, 100, 100],
+      "hwb": [360, 100, 100],
+      "cmyk": [100, 100, 100, 100]
+   };
+
+   var alpha = 1;
+   if (space == "alpha") {
+      alpha = vals;
+   }
+   else if (vals.length) {
+      // [10, 10, 10]
+      this.values[space] = vals.slice(0, space.length);
+      alpha = vals[space.length];
+   }
+   else if (vals[space.charAt(0)] !== undefined) {
+      // {r: 10, g: 10, b: 10}
+      for (var i = 0; i < space.length; i++) {
+        this.values[space][i] = vals[space.charAt(i)];
+      }
+      alpha = vals.a;
+   }
+   else if (vals[spaces[space][0]] !== undefined) {
+      // {red: 10, green: 10, blue: 10}
+      var chans = spaces[space];
+      for (var i = 0; i < space.length; i++) {
+        this.values[space][i] = vals[chans[i]];
+      }
+      alpha = vals.alpha;
+   }
+   this.values.alpha = Math.max(0, Math.min(1, (alpha !== undefined ? alpha : this.values.alpha) ));
+   if (space == "alpha") {
+      return;
+   }
+
+   // cap values of the space prior converting all values
+   for (var i = 0; i < space.length; i++) {
+      var capped = Math.max(0, Math.min(maxes[space][i], this.values[space][i]));
+      this.values[space][i] = Math.round(capped);
+   }
+
+   // convert to all the other color spaces
+   for (var sname in spaces) {
+      if (sname != space) {
+         this.values[sname] = convert[space][sname](this.values[space])
+      }
+
+      // cap values
+      for (var i = 0; i < sname.length; i++) {
+         var capped = Math.max(0, Math.min(maxes[sname][i], this.values[sname][i]));
+         this.values[sname][i] = Math.round(capped);
+      }
+   }
+   return true;
+}
+
+Color.prototype.setSpace = function(space, args) {
+   var vals = args[0];
+   if (vals === undefined) {
+      // color.rgb()
+      return this.getValues(space);
+   }
+   // color.rgb(10, 10, 10)
+   if (typeof vals == "number") {
+      vals = Array.prototype.slice.call(args);
+   }
+   this.setValues(space, vals);
+   return this;
+}
+
+Color.prototype.setChannel = function(space, index, val) {
+   if (val === undefined) {
+      // color.red()
+      return this.values[space][index];
+   }
+   // color.red(100)
+   this.values[space][index] = val;
+   this.setValues(space, this.values[space]);
+   return this;
+}
+
+module.exports = Color;
+
+},{"color-convert":11,"color-string":13}],15:[function(require,module,exports){
 var EventEmitter = require('events').EventEmitter;
 var inherits = require('inherits');
 
@@ -2199,32 +2210,7 @@ Arrows.prototype.useWASD = function () {
   this.setArrowKeyCodes(65, 68, 87, 83);
 }
 
-},{"events":36,"inherits":16}],16:[function(require,module,exports){
-if (typeof Object.create === 'function') {
-  // implementation from standard node.js 'util' module
-  module.exports = function inherits(ctor, superCtor) {
-    ctor.super_ = superCtor
-    ctor.prototype = Object.create(superCtor.prototype, {
-      constructor: {
-        value: ctor,
-        enumerable: false,
-        writable: true,
-        configurable: true
-      }
-    });
-  };
-} else {
-  // old school shim for old browsers
-  module.exports = function inherits(ctor, superCtor) {
-    ctor.super_ = superCtor
-    var TempCtor = function () {}
-    TempCtor.prototype = superCtor.prototype
-    ctor.prototype = new TempCtor()
-    ctor.prototype.constructor = ctor
-  }
-}
-
-},{}],17:[function(require,module,exports){
+},{"events":18,"inherits":19}],16:[function(require,module,exports){
 var EventEmitter = require('events').EventEmitter;
 var requestAnimationFrame = require('raf-stream');
 var inherits = require('inherits');
@@ -2316,167 +2302,7 @@ Game.prototype.drawAllLayers = function(){
     this.emit('draw', this.context);
   }
 }
-},{"events":36,"inherits":18,"raf-stream":19,"util":40}],18:[function(require,module,exports){
-arguments[4][16][0].apply(exports,arguments)
-},{"dup":16}],19:[function(require,module,exports){
-var EE = require('events').EventEmitter
-  , raf = require('raf')
-
-module.exports = function(el, tick) {
-  var last = 0
-    , ee = new EE
-
-  if(typeof el === 'function') {
-    tick = el
-    el = undefined
-  }
-
-  ee.pause = function() { ee.paused = true }
-  ee.resume = function() {
-    if(ee.paused) {
-      raf(iter, el)
-    }
-    ee.paused = false
-  }
-
-  raf(iter, el)
-
-  if(tick) {
-    ee.on('data', function(dt) {
-      tick(dt)
-    })
-  }
-
-  return ee
-
-  function iter(timestamp) {
-    var dt = 0
-
-    if(last > 0) {
-      dt = timestamp - last
-    }
-    last = timestamp
-
-    if(!ee.paused) {
-      ee.emit('data', dt)
-    }
-    // Check paused status again in
-    // case `pause()` was invoked by
-    // one of the 'data' listeners
-    if(!ee.paused) {
-      raf(iter, el)
-    }
-  }
-}
-
-},{"events":36,"raf":20}],20:[function(require,module,exports){
-var now = require('performance-now')
-  , global = typeof window === 'undefined' ? {} : window
-  , vendors = ['ms', 'moz', 'webkit', 'o']
-  , suffix = 'AnimationFrame'
-  , raf = global['request' + suffix]
-  , caf = global['cancel' + suffix] || global['cancelRequest' + suffix]
-
-for(var i = 0; i < vendors.length && !raf; i++) {
-  raf = global[vendors[i] + 'Request' + suffix]
-  caf = global[vendors[i] + 'Cancel' + suffix]
-      || global[vendors[i] + 'CancelRequest' + suffix]
-}
-
-if(!raf) {
-  var last = 0
-    , id = 0
-    , queue = []
-    , frameDuration = 1000 / 60
-
-  raf = function(callback) {
-    if(queue.length === 0) {
-      var _now = now()
-        , next = Math.max(0, frameDuration - (_now - last))
-      last = next + _now
-      setTimeout(function() {
-        var cp = queue.slice(0)
-        // Clear queue here to prevent
-        // callbacks from appending listeners
-        // to the current frame's queue
-        queue.length = 0
-        for (var i = 0; i < cp.length; i++) {
-          if (!cp[i].cancelled) {
-            try{
-              cp[i].callback(last)
-            } catch(e) {}
-          }
-        }
-      }, next)
-    }
-    queue.push({
-      handle: ++id,
-      callback: callback,
-      cancelled: false
-    })
-    return id
-  }
-
-  caf = function(handle) {
-    for(var i = 0; i < queue.length; i++) {
-      if(queue[i].handle === handle) {
-        queue[i].cancelled = true
-      }
-    }
-  }
-}
-
-module.exports = function() {
-  // Wrap in a new function to prevent
-  // `cancel` potentially being assigned
-  // to the native rAF function
-  return raf.apply(global, arguments)
-}
-module.exports.cancel = function() {
-  caf.apply(global, arguments)
-}
-
-},{"performance-now":21}],21:[function(require,module,exports){
-(function (process){
-// Generated by CoffeeScript 1.6.3
-(function() {
-  var getNanoSeconds, hrtime, loadTime;
-
-  if ((typeof performance !== "undefined" && performance !== null) && performance.now) {
-    module.exports = function() {
-      return performance.now();
-    };
-  } else if ((typeof process !== "undefined" && process !== null) && process.hrtime) {
-    module.exports = function() {
-      return (getNanoSeconds() - loadTime) / 1e6;
-    };
-    hrtime = process.hrtime;
-    getNanoSeconds = function() {
-      var hr;
-      hr = hrtime();
-      return hr[0] * 1e9 + hr[1];
-    };
-    loadTime = getNanoSeconds();
-  } else if (Date.now) {
-    module.exports = function() {
-      return Date.now() - loadTime;
-    };
-    loadTime = Date.now();
-  } else {
-    module.exports = function() {
-      return new Date().getTime() - loadTime;
-    };
-    loadTime = new Date().getTime();
-  }
-
-}).call(this);
-
-/*
-//@ sourceMappingURL=performance-now.map
-*/
-
-}).call(this,require('_process'))
-},{"_process":38}],22:[function(require,module,exports){
+},{"events":18,"inherits":19,"raf-stream":23,"util":26}],17:[function(require,module,exports){
 var EventEmitter = require('events').EventEmitter;
 var inherits = require('inherits');
 var vkey = require('vkey');
@@ -2507,937 +2333,7 @@ Keyboard.prototype.initializeListeners = function(){
     delete self.keysDown[vkey[e.keyCode]];
   }, false);
 };
-},{"events":36,"inherits":23,"vkey":24}],23:[function(require,module,exports){
-arguments[4][16][0].apply(exports,arguments)
-},{"dup":16}],24:[function(require,module,exports){
-var ua = typeof window !== 'undefined' ? window.navigator.userAgent : ''
-  , isOSX = /OS X/.test(ua)
-  , isOpera = /Opera/.test(ua)
-  , maybeFirefox = !/like Gecko/.test(ua) && !isOpera
-
-var i, output = module.exports = {
-  0:  isOSX ? '<menu>' : '<UNK>'
-, 1:  '<mouse 1>'
-, 2:  '<mouse 2>'
-, 3:  '<break>'
-, 4:  '<mouse 3>'
-, 5:  '<mouse 4>'
-, 6:  '<mouse 5>'
-, 8:  '<backspace>'
-, 9:  '<tab>'
-, 12: '<clear>'
-, 13: '<enter>'
-, 16: '<shift>'
-, 17: '<control>'
-, 18: '<alt>'
-, 19: '<pause>'
-, 20: '<caps-lock>'
-, 21: '<ime-hangul>'
-, 23: '<ime-junja>'
-, 24: '<ime-final>'
-, 25: '<ime-kanji>'
-, 27: '<escape>'
-, 28: '<ime-convert>'
-, 29: '<ime-nonconvert>'
-, 30: '<ime-accept>'
-, 31: '<ime-mode-change>'
-, 27: '<escape>'
-, 32: '<space>'
-, 33: '<page-up>'
-, 34: '<page-down>'
-, 35: '<end>'
-, 36: '<home>'
-, 37: '<left>'
-, 38: '<up>'
-, 39: '<right>'
-, 40: '<down>'
-, 41: '<select>'
-, 42: '<print>'
-, 43: '<execute>'
-, 44: '<snapshot>'
-, 45: '<insert>'
-, 46: '<delete>'
-, 47: '<help>'
-, 91: '<meta>'  // meta-left -- no one handles left and right properly, so we coerce into one.
-, 92: '<meta>'  // meta-right
-, 93: isOSX ? '<meta>' : '<menu>'      // chrome,opera,safari all report this for meta-right (osx mbp).
-, 95: '<sleep>'
-, 106: '<num-*>'
-, 107: '<num-+>'
-, 108: '<num-enter>'
-, 109: '<num-->'
-, 110: '<num-.>'
-, 111: '<num-/>'
-, 144: '<num-lock>'
-, 145: '<scroll-lock>'
-, 160: '<shift-left>'
-, 161: '<shift-right>'
-, 162: '<control-left>'
-, 163: '<control-right>'
-, 164: '<alt-left>'
-, 165: '<alt-right>'
-, 166: '<browser-back>'
-, 167: '<browser-forward>'
-, 168: '<browser-refresh>'
-, 169: '<browser-stop>'
-, 170: '<browser-search>'
-, 171: '<browser-favorites>'
-, 172: '<browser-home>'
-
-  // ff/osx reports '<volume-mute>' for '-'
-, 173: isOSX && maybeFirefox ? '-' : '<volume-mute>'
-, 174: '<volume-down>'
-, 175: '<volume-up>'
-, 176: '<next-track>'
-, 177: '<prev-track>'
-, 178: '<stop>'
-, 179: '<play-pause>'
-, 180: '<launch-mail>'
-, 181: '<launch-media-select>'
-, 182: '<launch-app 1>'
-, 183: '<launch-app 2>'
-, 186: ';'
-, 187: '='
-, 188: ','
-, 189: '-'
-, 190: '.'
-, 191: '/'
-, 192: '`'
-, 219: '['
-, 220: '\\'
-, 221: ']'
-, 222: "'"
-, 223: '<meta>'
-, 224: '<meta>'       // firefox reports meta here.
-, 226: '<alt-gr>'
-, 229: '<ime-process>'
-, 231: isOpera ? '`' : '<unicode>'
-, 246: '<attention>'
-, 247: '<crsel>'
-, 248: '<exsel>'
-, 249: '<erase-eof>'
-, 250: '<play>'
-, 251: '<zoom>'
-, 252: '<no-name>'
-, 253: '<pa-1>'
-, 254: '<clear>'
-}
-
-for(i = 58; i < 65; ++i) {
-  output[i] = String.fromCharCode(i)
-}
-
-// 0-9
-for(i = 48; i < 58; ++i) {
-  output[i] = (i - 48)+''
-}
-
-// A-Z
-for(i = 65; i < 91; ++i) {
-  output[i] = String.fromCharCode(i)
-}
-
-// num0-9
-for(i = 96; i < 107; ++i) {
-  output[i] = '<num-'+(i - 96)+'>'
-}
-
-// F1-F24
-for(i = 112; i < 136; ++i) {
-  output[i] = 'F'+(i-111)
-}
-
-},{}],25:[function(require,module,exports){
-module.exports = require('media').audio;
-
-},{"media":26}],26:[function(require,module,exports){
-module.exports = require('./lib/player');
-module.exports.audio = media('audio');
-module.exports.video = media('video');
-
-function media (kind) {
-  return function (urls, dom) {
-    return module.exports(kind, urls, dom);
-  };
-}
-
-},{"./lib/player":28}],27:[function(require,module,exports){
-var table = {
-  aif  : "audio/x-aiff",
-  aiff : "audio/x-aiff",
-  wav  : "audio/x-wav",
-  mp3  : 'audio/mpeg',
-  m3u  : "audio/x-mpegurl",
-  mid  : "audio/midi",
-  midi : "audio/midi",
-  m4a  : 'audio/m4a',
-  ogg  : 'audio/ogg',
-  mp4  : 'video/mp4',
-  ogv  : 'video/mp4',
-  webm : 'video/webm',
-  mkv  : 'video/x-matroska',
-  mpg  : 'video/mpeg'
-};
-
-module.exports = mimeOf;
-
-function mimeOf(url){
-  return table[ url.split('.').slice(-1)[0] ];
-}
-
-},{}],28:[function(require,module,exports){
-var newChain  = require('new-chain'),
-    src = require('./src'),
-    render = require('./render');
-
-module.exports = play;
-
-function play(media, urls, dom){
-  var el, chain, url;
-
-  dom || ( dom = document.documentElement );
-  el = render(media);
-  dom.appendChild(el);
-
-  chain = newChain({
-    autoplay: bool('autoplay'),
-    controls: bool('controls'),
-    load: method('load'),
-    loop: bool('loop'),
-    muted: bool('muted'),
-    on: on,
-    pause: method('pause'),
-    play: method('play'),
-    preload: bool('preload')
-  });
-
-  chain.currentTime = attr('currentTime');
-  chain.element = element;
-  chain.src = src.attr(el);
-  chain.volume = attr('volume');
-  chain.remove = remove;
-
-  chain.src(urls);
-
-  return chain;
-
-  function attr(name){
-    return function(value){
-      if ( arguments.length ) {
-        el[name] = value;
-        return chain;
-      }
-
-      return el[name];
-    };
-  }
-
-  function bool(name){
-    return function(value){
-      if (value === false) {
-        return el[name] = false;
-      }
-
-      return el[name] = true;
-    };
-  }
-
-  function element(){
-    return el;
-  }
-
-  function on(event, callback){
-    el.addEventListener(event, callback, false);
-  }
-
-  function method(name){
-    return function(){
-      return el[name].apply(el, arguments);
-    };
-  }
-
-  function remove(){
-    return el.parentNode.removeChild(el);
-  }
-
-}
-
-},{"./render":29,"./src":30,"new-chain":33}],29:[function(require,module,exports){
-var domify = require('domify'),
-    templates = require("./templates");
-
-module.exports = render;
-
-function render(media){
-  return domify(templates[media + '.html']);
-}
-
-},{"./templates":31,"domify":32}],30:[function(require,module,exports){
-var mimeOf = require("./mime");
-
-module.exports = {
-  attr: attr,
-  pick: pick
-};
-
-function attr(el){
-  var value;
-
-  return function(urls){
-    if (arguments.length) {
-      value = urls;
-      el.setAttribute('src', pick(el, value));
-    }
-
-    return value;
-  };
-}
-
-function pick(el, urls){
-  if(!urls) return;
-
-  if(typeof urls == 'string'){
-    return urls;
-  }
-
-  var canPlay = urls.filter(function (url) {
-    return !!el.canPlayType(url.mime || mimeOf(url.type || url));
-  });
-
-  if (canPlay.length == 0) return;
-
-  return canPlay[0].url || canPlay[0];
-}
-
-},{"./mime":27}],31:[function(require,module,exports){
-exports["audio.html"] = "<audio preload=\"auto\" /></audio>"
-exports["video.html"] = "<video preload=\"auto\" /></video>"
-},{}],32:[function(require,module,exports){
-
-/**
- * Expose `parse`.
- */
-
-module.exports = parse;
-
-/**
- * Wrap map from jquery.
- */
-
-var map = {
-  option: [1, '<select multiple="multiple">', '</select>'],
-  optgroup: [1, '<select multiple="multiple">', '</select>'],
-  legend: [1, '<fieldset>', '</fieldset>'],
-  thead: [1, '<table>', '</table>'],
-  tbody: [1, '<table>', '</table>'],
-  tfoot: [1, '<table>', '</table>'],
-  colgroup: [1, '<table>', '</table>'],
-  caption: [1, '<table>', '</table>'],
-  tr: [2, '<table><tbody>', '</tbody></table>'],
-  td: [3, '<table><tbody><tr>', '</tr></tbody></table>'],
-  th: [3, '<table><tbody><tr>', '</tr></tbody></table>'],
-  col: [2, '<table><tbody></tbody><colgroup>', '</colgroup></table>'],
-  _default: [0, '', '']
-};
-
-/**
- * Parse `html` and return the children.
- *
- * @param {String} html
- * @return {Array}
- * @api private
- */
-
-function parse(html) {
-  if ('string' != typeof html) throw new TypeError('String expected');
-
-  // tag name
-  var m = /<([\w:]+)/.exec(html);
-  if (!m) throw new Error('No elements were generated.');
-  var tag = m[1];
-
-  // body support
-  if (tag == 'body') {
-    var el = document.createElement('html');
-    el.innerHTML = html;
-    return el.removeChild(el.lastChild);
-  }
-
-  // wrap map
-  var wrap = map[tag] || map._default;
-  var depth = wrap[0];
-  var prefix = wrap[1];
-  var suffix = wrap[2];
-  var el = document.createElement('div');
-  el.innerHTML = prefix + html + suffix;
-  while (depth--) el = el.lastChild;
-
-  var els = el.children;
-  if (1 == els.length) {
-    return el.removeChild(els[0]);
-  }
-
-  var fragment = document.createDocumentFragment();
-  while (els.length) {
-    fragment.appendChild(el.removeChild(els[0]));
-  }
-
-  return fragment;
-}
-
-},{}],33:[function(require,module,exports){
-module.exports = newChain;
-module.exports.from = from;
-
-function from(chain){
-
-  return function(){
-    var m, i;
-
-    m = methods.apply(undefined, arguments);
-    i   = m.length;
-
-    while ( i -- ) {
-      chain[ m[i].name ] = m[i].fn;
-    }
-
-    m.forEach(function(method){
-      chain[ method.name ] = function(){
-        method.fn.apply(this, arguments);
-        return chain;
-      };
-    });
-
-    return chain;
-  };
-
-}
-
-function methods(){
-  var all, el, i, len, result, key;
-
-  all    = Array.prototype.slice.call(arguments);
-  result = [];
-  i      = all.length;
-
-  while ( i -- ) {
-    el = all[i];
-
-    if ( typeof el == 'function' ) {
-      result.push({ name: el.name, fn: el });
-      continue;
-    }
-
-    if ( typeof el != 'object' ) continue;
-
-    for ( key in el ) {
-      result.push({ name: key, fn: el[key] });
-    }
-  }
-
-  return result;
-}
-
-function newChain(){
-  return from({}).apply(undefined, arguments);
-}
-
-},{}],34:[function(require,module,exports){
-module.exports = function (point, vs) {
-    // ray-casting algorithm based on
-    // http://www.ecse.rpi.edu/Homepages/wrf/Research/Short_Notes/pnpoly.html
-    
-    var x = point[0], y = point[1];
-    
-    var inside = false;
-    for (var i = 0, j = vs.length - 1; i < vs.length; j = i++) {
-        var xi = vs[i][0], yi = vs[i][1];
-        var xj = vs[j][0], yj = vs[j][1];
-        
-        var intersect = ((yi > y) != (yj > y))
-            && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
-        if (intersect) inside = !inside;
-    }
-    
-    return inside;
-};
-
-},{}],35:[function(require,module,exports){
-;(function inject(clean, precision, undef) {
-
-  var isArray = function (a) {
-    return Object.prototype.toString.call(a) === "[object Array]";
-  };
-
-  var defined = function(a) {
-    return a !== undef;
-  };
-
-  function Vec2(x, y) {
-    if (!(this instanceof Vec2)) {
-      return new Vec2(x, y);
-    }
-
-    if (isArray(x)) {
-      y = x[1];
-      x = x[0];
-    } else if('object' === typeof x && x) {
-      y = x.y;
-      x = x.x;
-    }
-
-    this.x = Vec2.clean(x || 0);
-    this.y = Vec2.clean(y || 0);
-  }
-
-  Vec2.prototype = {
-    change : function(fn) {
-      if (typeof fn === 'function') {
-        if (this.observers) {
-          this.observers.push(fn);
-        } else {
-          this.observers = [fn];
-        }
-      } else if (this.observers && this.observers.length) {
-        for (var i=this.observers.length-1; i>=0; i--) {
-          this.observers[i](this, fn);
-        }
-      }
-
-      return this;
-    },
-
-    ignore : function(fn) {
-      if (this.observers) {
-        if (!fn) {
-          this.observers = [];
-        } else {
-          var o = this.observers, l = o.length;
-          while(l--) {
-            o[l] === fn && o.splice(l, 1);
-          }
-        }
-      }
-      return this;
-    },
-
-    // set x and y
-    set: function(x, y, notify) {
-      if('number' != typeof x) {
-        notify = y;
-        y = x.y;
-        x = x.x;
-      }
-
-      if(this.x === x && this.y === y) {
-        return this;
-      }
-
-      var orig = null;
-      if (notify !== false && this.observers && this.observers.length) {
-        orig = this.clone();
-      }
-
-      this.x = Vec2.clean(x);
-      this.y = Vec2.clean(y);
-
-      if(notify !== false) {
-        return this.change(orig);
-      }
-    },
-
-    // reset x and y to zero
-    zero : function() {
-      return this.set(0, 0);
-    },
-
-    // return a new vector with the same component values
-    // as this one
-    clone : function() {
-      return new (this.constructor)(this.x, this.y);
-    },
-
-    // negate the values of this vector
-    negate : function(returnNew) {
-      if (returnNew) {
-        return new (this.constructor)(-this.x, -this.y);
-      } else {
-        return this.set(-this.x, -this.y);
-      }
-    },
-
-    // Add the incoming `vec2` vector to this vector
-    add : function(x, y, returnNew) {
-
-      if (typeof x != 'number') {
-        returnNew = y;
-        if (isArray(x)) {
-          y = x[1];
-          x = x[0];
-        } else {
-          y = x.y;
-          x = x.x;
-        }
-      }
-
-      x += this.x;
-      y += this.y;
-
-
-      if (!returnNew) {
-        return this.set(x, y);
-      } else {
-        // Return a new vector if `returnNew` is truthy
-        return new (this.constructor)(x, y);
-      }
-    },
-
-    // Subtract the incoming `vec2` from this vector
-    subtract : function(x, y, returnNew) {
-      if (typeof x != 'number') {
-        returnNew = y;
-        if (isArray(x)) {
-          y = x[1];
-          x = x[0];
-        } else {
-          y = x.y;
-          x = x.x;
-        }
-      }
-
-      x = this.x - x;
-      y = this.y - y;
-
-      if (!returnNew) {
-        return this.set(x, y);
-      } else {
-        // Return a new vector if `returnNew` is truthy
-        return new (this.constructor)(x, y);
-      }
-    },
-
-    // Multiply this vector by the incoming `vec2`
-    multiply : function(x, y, returnNew) {
-      if (typeof x != 'number') {
-        returnNew = y;
-        if (isArray(x)) {
-          y = x[1];
-          x = x[0];
-        } else {
-          y = x.y;
-          x = x.x;
-        }
-      } else if (typeof y != 'number') {
-        returnNew = y;
-        y = x;
-      }
-
-      x *= this.x;
-      y *= this.y;
-
-      if (!returnNew) {
-        return this.set(x, y);
-      } else {
-        return new (this.constructor)(x, y);
-      }
-    },
-
-    // Rotate this vector. Accepts a `Rotation` or angle in radians.
-    //
-    // Passing a truthy `inverse` will cause the rotation to
-    // be reversed.
-    //
-    // If `returnNew` is truthy, a new
-    // `Vec2` will be created with the values resulting from
-    // the rotation. Otherwise the rotation will be applied
-    // to this vector directly, and this vector will be returned.
-    rotate : function(r, inverse, returnNew) {
-      var
-      x = this.x,
-      y = this.y,
-      cos = Math.cos(r),
-      sin = Math.sin(r),
-      rx, ry;
-
-      inverse = (inverse) ? -1 : 1;
-
-      rx = cos * x - (inverse * sin) * y;
-      ry = (inverse * sin) * x + cos * y;
-
-      if (returnNew) {
-        return new (this.constructor)(rx, ry);
-      } else {
-        return this.set(rx, ry);
-      }
-    },
-
-    // Calculate the length of this vector
-    length : function() {
-      var x = this.x, y = this.y;
-      return Math.sqrt(x * x + y * y);
-    },
-
-    // Get the length squared. For performance, use this instead of `Vec2#length` (if possible).
-    lengthSquared : function() {
-      var x = this.x, y = this.y;
-      return x*x+y*y;
-    },
-
-    // Return the distance betwen this `Vec2` and the incoming vec2 vector
-    // and return a scalar
-    distance : function(vec2) {
-      var x = this.x - vec2.x;
-      var y = this.y - vec2.y;
-      return Math.sqrt(x*x + y*y);
-    },
-
-    // Given Array of Vec2, find closest to this Vec2.
-    nearest : function(others) {
-      var
-      shortestDistance = Number.MAX_VALUE,
-      nearest = null,
-      currentDistance;
-
-      for (var i = others.length - 1; i >= 0; i--) {
-        currentDistance = this.distance(others[i]);
-        if (currentDistance <= shortestDistance) {
-          shortestDistance = currentDistance;
-          nearest = others[i];
-        }
-      }
-
-      return nearest;
-    },
-
-    // Convert this vector into a unit vector.
-    // Returns the length.
-    normalize : function(returnNew) {
-      var length = this.length();
-
-      // Collect a ratio to shrink the x and y coords
-      var invertedLength = (length < Number.MIN_VALUE) ? 0 : 1/length;
-
-      if (!returnNew) {
-        // Convert the coords to be greater than zero
-        // but smaller than or equal to 1.0
-        return this.set(this.x * invertedLength, this.y * invertedLength);
-      } else {
-        return new (this.constructor)(this.x * invertedLength, this.y * invertedLength);
-      }
-    },
-
-    // Determine if another `Vec2`'s components match this one's
-    // also accepts 2 scalars
-    equal : function(v, w) {
-      if (typeof v != 'number') {
-        if (isArray(v)) {
-          w = v[1];
-          v = v[0];
-        } else {
-          w = v.y;
-          v = v.x;
-        }
-      }
-
-      return (Vec2.clean(v) === this.x && Vec2.clean(w) === this.y);
-    },
-
-    // Return a new `Vec2` that contains the absolute value of
-    // each of this vector's parts
-    abs : function(returnNew) {
-      var x = Math.abs(this.x), y = Math.abs(this.y);
-
-      if (returnNew) {
-        return new (this.constructor)(x, y);
-      } else {
-        return this.set(x, y);
-      }
-    },
-
-    // Return a new `Vec2` consisting of the smallest values
-    // from this vector and the incoming
-    //
-    // When returnNew is truthy, a new `Vec2` will be returned
-    // otherwise the minimum values in either this or `v` will
-    // be applied to this vector.
-    min : function(v, returnNew) {
-      var
-      tx = this.x,
-      ty = this.y,
-      vx = v.x,
-      vy = v.y,
-      x = tx < vx ? tx : vx,
-      y = ty < vy ? ty : vy;
-
-      if (returnNew) {
-        return new (this.constructor)(x, y);
-      } else {
-        return this.set(x, y);
-      }
-    },
-
-    // Return a new `Vec2` consisting of the largest values
-    // from this vector and the incoming
-    //
-    // When returnNew is truthy, a new `Vec2` will be returned
-    // otherwise the minimum values in either this or `v` will
-    // be applied to this vector.
-    max : function(v, returnNew) {
-      var
-      tx = this.x,
-      ty = this.y,
-      vx = v.x,
-      vy = v.y,
-      x = tx > vx ? tx : vx,
-      y = ty > vy ? ty : vy;
-
-      if (returnNew) {
-        return new (this.constructor)(x, y);
-      } else {
-        return this.set(x, y);
-      }
-    },
-
-    // Clamp values into a range.
-    // If this vector's values are lower than the `low`'s
-    // values, then raise them.  If they are higher than
-    // `high`'s then lower them.
-    //
-    // Passing returnNew as true will cause a new Vec2 to be
-    // returned.  Otherwise, this vector's values will be clamped
-    clamp : function(low, high, returnNew) {
-      var ret = this.min(high, true).max(low);
-      if (returnNew) {
-        return ret;
-      } else {
-        return this.set(ret.x, ret.y);
-      }
-    },
-
-    // Perform linear interpolation between two vectors
-    // amount is a decimal between 0 and 1
-    lerp : function(vec, amount, returnNew) {
-      return this.add(vec.subtract(this, true).multiply(amount), returnNew);
-    },
-
-    // Get the skew vector such that dot(skew_vec, other) == cross(vec, other)
-    skew : function(returnNew) {
-      if (!returnNew) {
-        return this.set(-this.y, this.x)
-      } else {
-        return new (this.constructor)(-this.y, this.x);
-      }
-    },
-
-    // calculate the dot product between
-    // this vector and the incoming
-    dot : function(b) {
-      return Vec2.clean(this.x * b.x + b.y * this.y);
-    },
-
-    // calculate the perpendicular dot product between
-    // this vector and the incoming
-    perpDot : function(b) {
-      return Vec2.clean(this.x * b.y - this.y * b.x);
-    },
-
-    // Determine the angle between two vec2s
-    angleTo : function(vec) {
-      return Math.atan2(this.perpDot(vec), this.dot(vec));
-    },
-
-    // Divide this vector's components by a scalar
-    divide : function(x, y, returnNew) {
-      if (typeof x != 'number') {
-        returnNew = y;
-        if (isArray(x)) {
-          y = x[1];
-          x = x[0];
-        } else {
-          y = x.y;
-          x = x.x;
-        }
-      } else if (typeof y != 'number') {
-        returnNew = y;
-        y = x;
-      }
-
-      if (x === 0 || y === 0) {
-        throw new Error('division by zero')
-      }
-
-      if (isNaN(x) || isNaN(y)) {
-        throw new Error('NaN detected');
-      }
-
-      if (returnNew) {
-        return new (this.constructor)(this.x / x, this.y / y);
-      }
-
-      return this.set(this.x / x, this.y / y);
-    },
-
-    isPointOnLine : function(start, end) {
-      return (start.y - this.y) * (start.x - end.x) ===
-             (start.y - end.y) * (start.x - this.x);
-    },
-
-    toArray: function() {
-      return [this.x, this.y];
-    },
-
-    fromArray: function(array) {
-      return this.set(array[0], array[1]);
-    },
-    toJSON: function () {
-      return {x: this.x, y: this.y};
-    },
-    toString: function() {
-      return '(' + this.x + ', ' + this.y + ')';
-    },
-    constructor : Vec2
-  };
-
-  Vec2.fromArray = function(array, ctor) {
-    return new (ctor || Vec2)(array[0], array[1]);
-  };
-
-  // Floating point stability
-  Vec2.precision = precision || 8;
-  var p = Math.pow(10, Vec2.precision);
-
-  Vec2.clean = clean || function(val) {
-    if (isNaN(val)) {
-      throw new Error('NaN detected');
-    }
-
-    if (!isFinite(val)) {
-      throw new Error('Infinity detected');
-    }
-
-    if(Math.round(val) === val) {
-      return val;
-    }
-
-    return Math.round(val * p)/p;
-  };
-
-  Vec2.inject = inject;
-
-  if(!clean) {
-    Vec2.fast = inject(function (k) { return k; });
-
-    // Expose, but also allow creating a fresh Vec2 subclass.
-    if (typeof module !== 'undefined' && typeof module.exports == 'object') {
-      module.exports = Vec2;
-    } else {
-      window.Vec2 = window.Vec2 || Vec2;
-    }
-  }
-  return Vec2;
-})();
-
-},{}],36:[function(require,module,exports){
+},{"events":18,"inherits":19,"vkey":28}],18:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -3740,9 +2636,92 @@ function isUndefined(arg) {
   return arg === void 0;
 }
 
-},{}],37:[function(require,module,exports){
-arguments[4][16][0].apply(exports,arguments)
-},{"dup":16}],38:[function(require,module,exports){
+},{}],19:[function(require,module,exports){
+if (typeof Object.create === 'function') {
+  // implementation from standard node.js 'util' module
+  module.exports = function inherits(ctor, superCtor) {
+    ctor.super_ = superCtor
+    ctor.prototype = Object.create(superCtor.prototype, {
+      constructor: {
+        value: ctor,
+        enumerable: false,
+        writable: true,
+        configurable: true
+      }
+    });
+  };
+} else {
+  // old school shim for old browsers
+  module.exports = function inherits(ctor, superCtor) {
+    ctor.super_ = superCtor
+    var TempCtor = function () {}
+    TempCtor.prototype = superCtor.prototype
+    ctor.prototype = new TempCtor()
+    ctor.prototype.constructor = ctor
+  }
+}
+
+},{}],20:[function(require,module,exports){
+(function (process){
+// Generated by CoffeeScript 1.6.3
+(function() {
+  var getNanoSeconds, hrtime, loadTime;
+
+  if ((typeof performance !== "undefined" && performance !== null) && performance.now) {
+    module.exports = function() {
+      return performance.now();
+    };
+  } else if ((typeof process !== "undefined" && process !== null) && process.hrtime) {
+    module.exports = function() {
+      return (getNanoSeconds() - loadTime) / 1e6;
+    };
+    hrtime = process.hrtime;
+    getNanoSeconds = function() {
+      var hr;
+      hr = hrtime();
+      return hr[0] * 1e9 + hr[1];
+    };
+    loadTime = getNanoSeconds();
+  } else if (Date.now) {
+    module.exports = function() {
+      return Date.now() - loadTime;
+    };
+    loadTime = Date.now();
+  } else {
+    module.exports = function() {
+      return new Date().getTime() - loadTime;
+    };
+    loadTime = new Date().getTime();
+  }
+
+}).call(this);
+
+/*
+//@ sourceMappingURL=performance-now.map
+*/
+
+}).call(this,require('_process'))
+},{"_process":22}],21:[function(require,module,exports){
+module.exports = function (point, vs) {
+    // ray-casting algorithm based on
+    // http://www.ecse.rpi.edu/Homepages/wrf/Research/Short_Notes/pnpoly.html
+    
+    var x = point[0], y = point[1];
+    
+    var inside = false;
+    for (var i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+        var xi = vs[i][0], yi = vs[i][1];
+        var xj = vs[j][0], yj = vs[j][1];
+        
+        var intersect = ((yi > y) != (yj > y))
+            && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+    }
+    
+    return inside;
+};
+
+},{}],22:[function(require,module,exports){
 // shim for using process in browser
 
 var process = module.exports = {};
@@ -3802,14 +2781,132 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-},{}],39:[function(require,module,exports){
+},{}],23:[function(require,module,exports){
+var EE = require('events').EventEmitter
+  , raf = require('raf')
+
+module.exports = function(el, tick) {
+  var last = 0
+    , ee = new EE
+
+  if(typeof el === 'function') {
+    tick = el
+    el = undefined
+  }
+
+  ee.pause = function() { ee.paused = true }
+  ee.resume = function() {
+    if(ee.paused) {
+      raf(iter, el)
+    }
+    ee.paused = false
+  }
+
+  raf(iter, el)
+
+  if(tick) {
+    ee.on('data', function(dt) {
+      tick(dt)
+    })
+  }
+
+  return ee
+
+  function iter(timestamp) {
+    var dt = 0
+
+    if(last > 0) {
+      dt = timestamp - last
+    }
+    last = timestamp
+
+    if(!ee.paused) {
+      ee.emit('data', dt)
+    }
+    // Check paused status again in
+    // case `pause()` was invoked by
+    // one of the 'data' listeners
+    if(!ee.paused) {
+      raf(iter, el)
+    }
+  }
+}
+
+},{"events":18,"raf":24}],24:[function(require,module,exports){
+var now = require('performance-now')
+  , global = typeof window === 'undefined' ? {} : window
+  , vendors = ['ms', 'moz', 'webkit', 'o']
+  , suffix = 'AnimationFrame'
+  , raf = global['request' + suffix]
+  , caf = global['cancel' + suffix] || global['cancelRequest' + suffix]
+
+for(var i = 0; i < vendors.length && !raf; i++) {
+  raf = global[vendors[i] + 'Request' + suffix]
+  caf = global[vendors[i] + 'Cancel' + suffix]
+      || global[vendors[i] + 'CancelRequest' + suffix]
+}
+
+if(!raf) {
+  var last = 0
+    , id = 0
+    , queue = []
+    , frameDuration = 1000 / 60
+
+  raf = function(callback) {
+    if(queue.length === 0) {
+      var _now = now()
+        , next = Math.max(0, frameDuration - (_now - last))
+      last = next + _now
+      setTimeout(function() {
+        var cp = queue.slice(0)
+        // Clear queue here to prevent
+        // callbacks from appending listeners
+        // to the current frame's queue
+        queue.length = 0
+        for (var i = 0; i < cp.length; i++) {
+          if (!cp[i].cancelled) {
+            try{
+              cp[i].callback(last)
+            } catch(e) {}
+          }
+        }
+      }, next)
+    }
+    queue.push({
+      handle: ++id,
+      callback: callback,
+      cancelled: false
+    })
+    return id
+  }
+
+  caf = function(handle) {
+    for(var i = 0; i < queue.length; i++) {
+      if(queue[i].handle === handle) {
+        queue[i].cancelled = true
+      }
+    }
+  }
+}
+
+module.exports = function() {
+  // Wrap in a new function to prevent
+  // `cancel` potentially being assigned
+  // to the native rAF function
+  return raf.apply(global, arguments)
+}
+module.exports.cancel = function() {
+  caf.apply(global, arguments)
+}
+
+},{"performance-now":20}],25:[function(require,module,exports){
 module.exports = function isBuffer(arg) {
   return arg && typeof arg === 'object'
     && typeof arg.copy === 'function'
     && typeof arg.fill === 'function'
     && typeof arg.readUInt8 === 'function';
 }
-},{}],40:[function(require,module,exports){
+},{}],26:[function(require,module,exports){
 (function (process,global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -4399,4 +3496,617 @@ function hasOwnProperty(obj, prop) {
 }
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./support/isBuffer":39,"_process":38,"inherits":37}]},{},[1]);
+},{"./support/isBuffer":25,"_process":22,"inherits":19}],27:[function(require,module,exports){
+;(function inject(clean, precision, undef) {
+
+  var isArray = function (a) {
+    return Object.prototype.toString.call(a) === "[object Array]";
+  };
+
+  var defined = function(a) {
+    return a !== undef;
+  };
+
+  function Vec2(x, y) {
+    if (!(this instanceof Vec2)) {
+      return new Vec2(x, y);
+    }
+
+    if (isArray(x)) {
+      y = x[1];
+      x = x[0];
+    } else if('object' === typeof x && x) {
+      y = x.y;
+      x = x.x;
+    }
+
+    this.x = Vec2.clean(x || 0);
+    this.y = Vec2.clean(y || 0);
+  }
+
+  Vec2.prototype = {
+    change : function(fn) {
+      if (typeof fn === 'function') {
+        if (this.observers) {
+          this.observers.push(fn);
+        } else {
+          this.observers = [fn];
+        }
+      } else if (this.observers && this.observers.length) {
+        for (var i=this.observers.length-1; i>=0; i--) {
+          this.observers[i](this, fn);
+        }
+      }
+
+      return this;
+    },
+
+    ignore : function(fn) {
+      if (this.observers) {
+        if (!fn) {
+          this.observers = [];
+        } else {
+          var o = this.observers, l = o.length;
+          while(l--) {
+            o[l] === fn && o.splice(l, 1);
+          }
+        }
+      }
+      return this;
+    },
+
+    // set x and y
+    set: function(x, y, notify) {
+      if('number' != typeof x) {
+        notify = y;
+        y = x.y;
+        x = x.x;
+      }
+
+      if(this.x === x && this.y === y) {
+        return this;
+      }
+
+      var orig = null;
+      if (notify !== false && this.observers && this.observers.length) {
+        orig = this.clone();
+      }
+
+      this.x = Vec2.clean(x);
+      this.y = Vec2.clean(y);
+
+      if(notify !== false) {
+        return this.change(orig);
+      }
+    },
+
+    // reset x and y to zero
+    zero : function() {
+      return this.set(0, 0);
+    },
+
+    // return a new vector with the same component values
+    // as this one
+    clone : function() {
+      return new (this.constructor)(this.x, this.y);
+    },
+
+    // negate the values of this vector
+    negate : function(returnNew) {
+      if (returnNew) {
+        return new (this.constructor)(-this.x, -this.y);
+      } else {
+        return this.set(-this.x, -this.y);
+      }
+    },
+
+    // Add the incoming `vec2` vector to this vector
+    add : function(x, y, returnNew) {
+
+      if (typeof x != 'number') {
+        returnNew = y;
+        if (isArray(x)) {
+          y = x[1];
+          x = x[0];
+        } else {
+          y = x.y;
+          x = x.x;
+        }
+      }
+
+      x += this.x;
+      y += this.y;
+
+
+      if (!returnNew) {
+        return this.set(x, y);
+      } else {
+        // Return a new vector if `returnNew` is truthy
+        return new (this.constructor)(x, y);
+      }
+    },
+
+    // Subtract the incoming `vec2` from this vector
+    subtract : function(x, y, returnNew) {
+      if (typeof x != 'number') {
+        returnNew = y;
+        if (isArray(x)) {
+          y = x[1];
+          x = x[0];
+        } else {
+          y = x.y;
+          x = x.x;
+        }
+      }
+
+      x = this.x - x;
+      y = this.y - y;
+
+      if (!returnNew) {
+        return this.set(x, y);
+      } else {
+        // Return a new vector if `returnNew` is truthy
+        return new (this.constructor)(x, y);
+      }
+    },
+
+    // Multiply this vector by the incoming `vec2`
+    multiply : function(x, y, returnNew) {
+      if (typeof x != 'number') {
+        returnNew = y;
+        if (isArray(x)) {
+          y = x[1];
+          x = x[0];
+        } else {
+          y = x.y;
+          x = x.x;
+        }
+      } else if (typeof y != 'number') {
+        returnNew = y;
+        y = x;
+      }
+
+      x *= this.x;
+      y *= this.y;
+
+      if (!returnNew) {
+        return this.set(x, y);
+      } else {
+        return new (this.constructor)(x, y);
+      }
+    },
+
+    // Rotate this vector. Accepts a `Rotation` or angle in radians.
+    //
+    // Passing a truthy `inverse` will cause the rotation to
+    // be reversed.
+    //
+    // If `returnNew` is truthy, a new
+    // `Vec2` will be created with the values resulting from
+    // the rotation. Otherwise the rotation will be applied
+    // to this vector directly, and this vector will be returned.
+    rotate : function(r, inverse, returnNew) {
+      var
+      x = this.x,
+      y = this.y,
+      cos = Math.cos(r),
+      sin = Math.sin(r),
+      rx, ry;
+
+      inverse = (inverse) ? -1 : 1;
+
+      rx = cos * x - (inverse * sin) * y;
+      ry = (inverse * sin) * x + cos * y;
+
+      if (returnNew) {
+        return new (this.constructor)(rx, ry);
+      } else {
+        return this.set(rx, ry);
+      }
+    },
+
+    // Calculate the length of this vector
+    length : function() {
+      var x = this.x, y = this.y;
+      return Math.sqrt(x * x + y * y);
+    },
+
+    // Get the length squared. For performance, use this instead of `Vec2#length` (if possible).
+    lengthSquared : function() {
+      var x = this.x, y = this.y;
+      return x*x+y*y;
+    },
+
+    // Return the distance betwen this `Vec2` and the incoming vec2 vector
+    // and return a scalar
+    distance : function(vec2) {
+      var x = this.x - vec2.x;
+      var y = this.y - vec2.y;
+      return Math.sqrt(x*x + y*y);
+    },
+
+    // Given Array of Vec2, find closest to this Vec2.
+    nearest : function(others) {
+      var
+      shortestDistance = Number.MAX_VALUE,
+      nearest = null,
+      currentDistance;
+
+      for (var i = others.length - 1; i >= 0; i--) {
+        currentDistance = this.distance(others[i]);
+        if (currentDistance <= shortestDistance) {
+          shortestDistance = currentDistance;
+          nearest = others[i];
+        }
+      }
+
+      return nearest;
+    },
+
+    // Convert this vector into a unit vector.
+    // Returns the length.
+    normalize : function(returnNew) {
+      var length = this.length();
+
+      // Collect a ratio to shrink the x and y coords
+      var invertedLength = (length < Number.MIN_VALUE) ? 0 : 1/length;
+
+      if (!returnNew) {
+        // Convert the coords to be greater than zero
+        // but smaller than or equal to 1.0
+        return this.set(this.x * invertedLength, this.y * invertedLength);
+      } else {
+        return new (this.constructor)(this.x * invertedLength, this.y * invertedLength);
+      }
+    },
+
+    // Determine if another `Vec2`'s components match this one's
+    // also accepts 2 scalars
+    equal : function(v, w) {
+      if (typeof v != 'number') {
+        if (isArray(v)) {
+          w = v[1];
+          v = v[0];
+        } else {
+          w = v.y;
+          v = v.x;
+        }
+      }
+
+      return (Vec2.clean(v) === this.x && Vec2.clean(w) === this.y);
+    },
+
+    // Return a new `Vec2` that contains the absolute value of
+    // each of this vector's parts
+    abs : function(returnNew) {
+      var x = Math.abs(this.x), y = Math.abs(this.y);
+
+      if (returnNew) {
+        return new (this.constructor)(x, y);
+      } else {
+        return this.set(x, y);
+      }
+    },
+
+    // Return a new `Vec2` consisting of the smallest values
+    // from this vector and the incoming
+    //
+    // When returnNew is truthy, a new `Vec2` will be returned
+    // otherwise the minimum values in either this or `v` will
+    // be applied to this vector.
+    min : function(v, returnNew) {
+      var
+      tx = this.x,
+      ty = this.y,
+      vx = v.x,
+      vy = v.y,
+      x = tx < vx ? tx : vx,
+      y = ty < vy ? ty : vy;
+
+      if (returnNew) {
+        return new (this.constructor)(x, y);
+      } else {
+        return this.set(x, y);
+      }
+    },
+
+    // Return a new `Vec2` consisting of the largest values
+    // from this vector and the incoming
+    //
+    // When returnNew is truthy, a new `Vec2` will be returned
+    // otherwise the minimum values in either this or `v` will
+    // be applied to this vector.
+    max : function(v, returnNew) {
+      var
+      tx = this.x,
+      ty = this.y,
+      vx = v.x,
+      vy = v.y,
+      x = tx > vx ? tx : vx,
+      y = ty > vy ? ty : vy;
+
+      if (returnNew) {
+        return new (this.constructor)(x, y);
+      } else {
+        return this.set(x, y);
+      }
+    },
+
+    // Clamp values into a range.
+    // If this vector's values are lower than the `low`'s
+    // values, then raise them.  If they are higher than
+    // `high`'s then lower them.
+    //
+    // Passing returnNew as true will cause a new Vec2 to be
+    // returned.  Otherwise, this vector's values will be clamped
+    clamp : function(low, high, returnNew) {
+      var ret = this.min(high, true).max(low);
+      if (returnNew) {
+        return ret;
+      } else {
+        return this.set(ret.x, ret.y);
+      }
+    },
+
+    // Perform linear interpolation between two vectors
+    // amount is a decimal between 0 and 1
+    lerp : function(vec, amount, returnNew) {
+      return this.add(vec.subtract(this, true).multiply(amount), returnNew);
+    },
+
+    // Get the skew vector such that dot(skew_vec, other) == cross(vec, other)
+    skew : function(returnNew) {
+      if (!returnNew) {
+        return this.set(-this.y, this.x)
+      } else {
+        return new (this.constructor)(-this.y, this.x);
+      }
+    },
+
+    // calculate the dot product between
+    // this vector and the incoming
+    dot : function(b) {
+      return Vec2.clean(this.x * b.x + b.y * this.y);
+    },
+
+    // calculate the perpendicular dot product between
+    // this vector and the incoming
+    perpDot : function(b) {
+      return Vec2.clean(this.x * b.y - this.y * b.x);
+    },
+
+    // Determine the angle between two vec2s
+    angleTo : function(vec) {
+      return Math.atan2(this.perpDot(vec), this.dot(vec));
+    },
+
+    // Divide this vector's components by a scalar
+    divide : function(x, y, returnNew) {
+      if (typeof x != 'number') {
+        returnNew = y;
+        if (isArray(x)) {
+          y = x[1];
+          x = x[0];
+        } else {
+          y = x.y;
+          x = x.x;
+        }
+      } else if (typeof y != 'number') {
+        returnNew = y;
+        y = x;
+      }
+
+      if (x === 0 || y === 0) {
+        throw new Error('division by zero')
+      }
+
+      if (isNaN(x) || isNaN(y)) {
+        throw new Error('NaN detected');
+      }
+
+      if (returnNew) {
+        return new (this.constructor)(this.x / x, this.y / y);
+      }
+
+      return this.set(this.x / x, this.y / y);
+    },
+
+    isPointOnLine : function(start, end) {
+      return (start.y - this.y) * (start.x - end.x) ===
+             (start.y - end.y) * (start.x - this.x);
+    },
+
+    toArray: function() {
+      return [this.x, this.y];
+    },
+
+    fromArray: function(array) {
+      return this.set(array[0], array[1]);
+    },
+    toJSON: function () {
+      return {x: this.x, y: this.y};
+    },
+    toString: function() {
+      return '(' + this.x + ', ' + this.y + ')';
+    },
+    constructor : Vec2
+  };
+
+  Vec2.fromArray = function(array, ctor) {
+    return new (ctor || Vec2)(array[0], array[1]);
+  };
+
+  // Floating point stability
+  Vec2.precision = precision || 8;
+  var p = Math.pow(10, Vec2.precision);
+
+  Vec2.clean = clean || function(val) {
+    if (isNaN(val)) {
+      throw new Error('NaN detected');
+    }
+
+    if (!isFinite(val)) {
+      throw new Error('Infinity detected');
+    }
+
+    if(Math.round(val) === val) {
+      return val;
+    }
+
+    return Math.round(val * p)/p;
+  };
+
+  Vec2.inject = inject;
+
+  if(!clean) {
+    Vec2.fast = inject(function (k) { return k; });
+
+    // Expose, but also allow creating a fresh Vec2 subclass.
+    if (typeof module !== 'undefined' && typeof module.exports == 'object') {
+      module.exports = Vec2;
+    } else {
+      window.Vec2 = window.Vec2 || Vec2;
+    }
+  }
+  return Vec2;
+})();
+
+},{}],28:[function(require,module,exports){
+var ua = typeof window !== 'undefined' ? window.navigator.userAgent : ''
+  , isOSX = /OS X/.test(ua)
+  , isOpera = /Opera/.test(ua)
+  , maybeFirefox = !/like Gecko/.test(ua) && !isOpera
+
+var i, output = module.exports = {
+  0:  isOSX ? '<menu>' : '<UNK>'
+, 1:  '<mouse 1>'
+, 2:  '<mouse 2>'
+, 3:  '<break>'
+, 4:  '<mouse 3>'
+, 5:  '<mouse 4>'
+, 6:  '<mouse 5>'
+, 8:  '<backspace>'
+, 9:  '<tab>'
+, 12: '<clear>'
+, 13: '<enter>'
+, 16: '<shift>'
+, 17: '<control>'
+, 18: '<alt>'
+, 19: '<pause>'
+, 20: '<caps-lock>'
+, 21: '<ime-hangul>'
+, 23: '<ime-junja>'
+, 24: '<ime-final>'
+, 25: '<ime-kanji>'
+, 27: '<escape>'
+, 28: '<ime-convert>'
+, 29: '<ime-nonconvert>'
+, 30: '<ime-accept>'
+, 31: '<ime-mode-change>'
+, 27: '<escape>'
+, 32: '<space>'
+, 33: '<page-up>'
+, 34: '<page-down>'
+, 35: '<end>'
+, 36: '<home>'
+, 37: '<left>'
+, 38: '<up>'
+, 39: '<right>'
+, 40: '<down>'
+, 41: '<select>'
+, 42: '<print>'
+, 43: '<execute>'
+, 44: '<snapshot>'
+, 45: '<insert>'
+, 46: '<delete>'
+, 47: '<help>'
+, 91: '<meta>'  // meta-left -- no one handles left and right properly, so we coerce into one.
+, 92: '<meta>'  // meta-right
+, 93: isOSX ? '<meta>' : '<menu>'      // chrome,opera,safari all report this for meta-right (osx mbp).
+, 95: '<sleep>'
+, 106: '<num-*>'
+, 107: '<num-+>'
+, 108: '<num-enter>'
+, 109: '<num-->'
+, 110: '<num-.>'
+, 111: '<num-/>'
+, 144: '<num-lock>'
+, 145: '<scroll-lock>'
+, 160: '<shift-left>'
+, 161: '<shift-right>'
+, 162: '<control-left>'
+, 163: '<control-right>'
+, 164: '<alt-left>'
+, 165: '<alt-right>'
+, 166: '<browser-back>'
+, 167: '<browser-forward>'
+, 168: '<browser-refresh>'
+, 169: '<browser-stop>'
+, 170: '<browser-search>'
+, 171: '<browser-favorites>'
+, 172: '<browser-home>'
+
+  // ff/osx reports '<volume-mute>' for '-'
+, 173: isOSX && maybeFirefox ? '-' : '<volume-mute>'
+, 174: '<volume-down>'
+, 175: '<volume-up>'
+, 176: '<next-track>'
+, 177: '<prev-track>'
+, 178: '<stop>'
+, 179: '<play-pause>'
+, 180: '<launch-mail>'
+, 181: '<launch-media-select>'
+, 182: '<launch-app 1>'
+, 183: '<launch-app 2>'
+, 186: ';'
+, 187: '='
+, 188: ','
+, 189: '-'
+, 190: '.'
+, 191: '/'
+, 192: '`'
+, 219: '['
+, 220: '\\'
+, 221: ']'
+, 222: "'"
+, 223: '<meta>'
+, 224: '<meta>'       // firefox reports meta here.
+, 226: '<alt-gr>'
+, 229: '<ime-process>'
+, 231: isOpera ? '`' : '<unicode>'
+, 246: '<attention>'
+, 247: '<crsel>'
+, 248: '<exsel>'
+, 249: '<erase-eof>'
+, 250: '<play>'
+, 251: '<zoom>'
+, 252: '<no-name>'
+, 253: '<pa-1>'
+, 254: '<clear>'
+}
+
+for(i = 58; i < 65; ++i) {
+  output[i] = String.fromCharCode(i)
+}
+
+// 0-9
+for(i = 48; i < 58; ++i) {
+  output[i] = (i - 48)+''
+}
+
+// A-Z
+for(i = 65; i < 91; ++i) {
+  output[i] = String.fromCharCode(i)
+}
+
+// num0-9
+for(i = 96; i < 107; ++i) {
+  output[i] = '<num-'+(i - 96)+'>'
+}
+
+// F1-F24
+for(i = 112; i < 136; ++i) {
+  output[i] = 'F'+(i-111)
+}
+
+},{}]},{},[1]);
