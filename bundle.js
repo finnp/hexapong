@@ -49,21 +49,17 @@ menu.selectedColor = colors.get('light')
 window.addEventListener('touchstart', event => {
   event.preventDefault()
   if (game.state !== 'playing') menu.select()
-  if (event.touches[0].pageX < game.width/2) {
-    player.input = 'left'
-  } else {
-    // window.alert(event.touches[0].p)
-    player.input = 'right'
-  }
+  else player.touches = event.touches
 })
 
 window.addEventListener('touchend', event => {
   event.preventDefault()  
-  player.input = 'stay'
+  player.touches = event.touches
 })
 
 window.addEventListener('touchmove', event => {
   event.preventDefault()
+  player.touches = event.touches
 })
 
 var primaryArrows = new Arrows()
@@ -575,20 +571,34 @@ Player.prototype.update = function (circle, ball) {
       }
     }
   } else {
-    if (this.arrows.isDown('left')) this.input = 'left'
-    else if (this.arrows.isDown('right')) this.input = 'right'
-    else this.input = 'stay'
-    if(this.input === 'left') this.angle += 2
-    if(this.input === 'right') this.angle -= 2
+    if (this.touches && this.touches[0]) {
+      const stayPosition = getNewPosition(this.x, this.y, this.width, this.height, circle, this.angle)
+      const leftPosition = getNewPosition(this.x, this.y, this.width, this.height, circle, this.angle + 2)
+      const rightPosition = getNewPosition(this.x, this.y, this.width, this.height, circle, this.angle - 2)
+
+      const distToStayPos = distance({x: this.touches[0].pageX, y: this.touches[0].pageY}, stayPosition)
+      const distToLeftPos = distance({x: this.touches[0].pageX, y: this.touches[0].pageY}, leftPosition)
+      const distToRightPos = distance({x: this.touches[0].pageX, y: this.touches[0].pageY}, rightPosition)
+
+      if(distToRightPos < distToStayPos && distToRightPos < distToLeftPos) {
+        this.angle -= 2
+      }
+      if(distToLeftPos < distToStayPos && distToLeftPos < distToRightPos) {
+        this.angle += 2
+      }
+      
+    } else {
+      if (this.arrows.isDown('left')) this.angle += 2
+      else if (this.arrows.isDown('right')) this.angle -= 2
+    }
   }
 
 
   this.angle = this.angle % 360
 
-  // update .x and .y
-  var p = circle.getCoordinates(this.angle)
-  this.x = p.x - (this.width / 2)
-  this.y = p.y - (this.height / 2)
+  const pos = getNewPosition(this.x, this.y, this.width, this.height, circle, this.angle)
+  this.x = pos.x
+  this.y = pos.y
 }
 Player.prototype.draw = function (c) {
   c.save()
@@ -618,6 +628,10 @@ function distance (p1, p2) {
   return Math.sqrt(Math.pow((p1.x - p2.x), 2) + Math.pow((p1.y - p2.y), 2))
 }
 
+function getNewPosition(x, y, width, height, circle, angle) {
+  var p = circle.getCoordinates(angle)
+  return { x: p.x - (width / 2), y: p.y - (height / 2)}
+}
 },{"./helper/deg2rad.js":5}],11:[function(require,module,exports){
 /* MIT license */
 
