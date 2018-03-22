@@ -19,16 +19,28 @@ colors.rotate(200)
 
 var game = new Game()
 
-var player = new Player()
-var player2 = new Player()
 
-var circle = new Circle(game.width / 2, game.height / 2)
-var ball = new Ball()
+var circle = new Circle(
+  game.width / 2,
+  game.height / 2,
+  Math.min(game.width, game.height) * 0.3
+)
+
+var ball = new Ball(circle.radius / 80)
 ball.startPoint.x = circle.x
 ball.startPoint.y = circle.y
-var hexagon = new Hexagon(colors.get('hexagon'), circle.x, circle.y, 200)
 
-var menu = new Menu(game, circle.x, circle.y)
+var hexagon = new Hexagon(colors.get('hexagon'), circle.x, circle.y, circle.radius * 4 / 3)
+
+var player = new Player(circle.radius / 30, circle.radius / 3)
+var player2 = new Player(circle.radius / 30, circle.radius /3)
+
+var menu = new Menu(
+  game,
+  circle.x,
+  circle.y,
+  circle.radius / 3
+)
 menu.color = colors.get('dark')
 menu.selectedColor = colors.get('light')
 
@@ -125,9 +137,10 @@ game.on('draw', function (c) {
   if (game.state === 'gameover') {
     var darkPlayerWins = player.score > player2.score
     var endText = darkPlayerWins ? 'Dark player wins' : 'Light player wins'
+    let fontSize = circle.radius / 3.5
     c.fillStyle = darkPlayerWins ? colors.get('dark').rgbString() : colors.get('light').rgbString()
-    c.font = "48px 'Open Sans', sans-serif"
+    c.font = fontSize + "px 'Open Sans', sans-serif"
     var textSizes = c.measureText(endText)
-    c.fillText(endText, circle.x - textSizes.width / 2, circle.y + 20)
+    c.fillText(endText, circle.x - textSizes.width / 2, circle.y + fontSize * 0.4)
   }
 })
