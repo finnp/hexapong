@@ -44,6 +44,27 @@ var menu = new Menu(
 menu.color = colors.get('dark')
 menu.selectedColor = colors.get('light')
 
+
+window.addEventListener('touchstart', event => {
+  event.preventDefault()
+  if (game.state !== 'playing') menu.select()
+  if (event.touches[0].pageX < game.width/2) {
+    player.input = 'left'
+  } else {
+    // window.alert(event.touches[0].p)
+    player.input = 'right'
+  }
+})
+
+window.addEventListener('touchend', event => {
+  event.preventDefault()  
+  player.input = 'stay'
+})
+
+window.addEventListener('touchmove', event => {
+  event.preventDefault()
+})
+
 var primaryArrows = new Arrows()
 
 primaryArrows.on('down', function () {
