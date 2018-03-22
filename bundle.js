@@ -20,18 +20,51 @@ colors.rotate(200)
 
 var game = new Game()
 
-var player = new Player()
-var player2 = new Player()
 
-var circle = new Circle(game.width / 2, game.height / 2)
-var ball = new Ball()
+var circle = new Circle(
+  game.width / 2,
+  game.height / 2,
+  Math.min(game.width, game.height) * 0.3
+)
+
+var ball = new Ball(circle.radius / 80)
 ball.startPoint.x = circle.x
 ball.startPoint.y = circle.y
-var hexagon = new Hexagon(colors.get('hexagon'), circle.x, circle.y, 200)
 
-var menu = new Menu(game, circle.x, circle.y)
+var hexagon = new Hexagon(colors.get('hexagon'), circle.x, circle.y, circle.radius * 4 / 3)
+
+var player = new Player(circle.radius / 30, circle.radius / 3)
+var player2 = new Player(circle.radius / 30, circle.radius /3)
+
+var menu = new Menu(
+  game,
+  circle.x,
+  circle.y,
+  circle.radius / 3
+)
 menu.color = colors.get('dark')
 menu.selectedColor = colors.get('light')
+
+
+window.addEventListener('touchstart', event => {
+  event.preventDefault()
+  if (game.state !== 'playing') menu.select()
+  if (event.touches[0].pageX < game.width/2) {
+    player.input = 'left'
+  } else {
+    // window.alert(event.touches[0].p)
+    player.input = 'right'
+  }
+})
+
+window.addEventListener('touchend', event => {
+  event.preventDefault()  
+  player.input = 'stay'
+})
+
+window.addEventListener('touchmove', event => {
+  event.preventDefault()
+})
 
 var primaryArrows = new Arrows()
 
@@ -126,23 +159,27 @@ game.on('draw', function (c) {
   if (game.state === 'gameover') {
     var darkPlayerWins = player.score > player2.score
     var endText = darkPlayerWins ? 'Dark player wins' : 'Light player wins'
+    let fontSize = circle.radius / 3.5
     c.fillStyle = darkPlayerWins ? colors.get('dark').rgbString() : colors.get('light').rgbString()
-    c.font = "48px 'Open Sans', sans-serif"
+    c.font = fontSize + "px 'Open Sans', sans-serif"
     var textSizes = c.measureText(endText)
-    c.fillText(endText, circle.x - textSizes.width / 2, circle.y + 20)
+    c.fillText(endText, circle.x - textSizes.width / 2, circle.y + fontSize * 0.4)
   }
 })
 
-},{"./lib/ball.js":2,"./lib/circle.js":3,"./lib/colorscheme.js":4,"./lib/hexagon.js":7,"./lib/menu.js":8,"./lib/player.js":9,"crtrdg-arrows":15,"crtrdg-gameloop":16,"crtrdg-keyboard":17}],2:[function(require,module,exports){
+},{"./lib/ball.js":2,"./lib/circle.js":3,"./lib/colorscheme.js":4,"./lib/hexagon.js":8,"./lib/menu.js":9,"./lib/player.js":10,"crtrdg-arrows":16,"crtrdg-gameloop":17,"crtrdg-keyboard":18}],2:[function(require,module,exports){
 var Vec2 = require('vec2')
 var insidePolygon = require('point-in-polygon')
 var deg2rad = require('./helper/deg2rad.js')
+var rad2deg = require('./helper/rad2deg.js')
 
 module.exports = Ball
 
-function Ball () {
-  this.radius = 2
+function Ball (radius) {
+  this.radius = radius || 2
   this.startPoint = {x: 0, y: 0}
+  this.x = this.startPoint.x
+  this.y = this.startPoint.y
   this.reset()
   this.tail = []
 }
@@ -150,7 +187,7 @@ Ball.prototype.reset = function () {
   this.tail = []
   this.x = this.startPoint.x
   this.y = this.startPoint.y
-  this.speed = 2
+  this.speed = this.radius
   this.direction = Math.random() * 360
 }
 Ball.prototype.update = function () {
@@ -161,10 +198,10 @@ Ball.prototype.update = function () {
   this.x += p.x
   this.y += p.y
 }
-Ball.prototype.moveVector = function (deg) {
+Ball.prototype.moveVector = function (angle) {
   var q = {}
-  q.x = this.speed * Math.cos(deg * (Math.PI / 180))
-  q.y = this.speed * Math.sin(deg * (Math.PI / 180))
+  q.x = this.speed * Math.cos(deg2rad(angle))
+  q.y = this.speed * Math.sin(deg2rad(angle))
   return q
 }
 Ball.prototype.moveBack = function () {
@@ -208,33 +245,46 @@ Ball.prototype.checkPlayerCollision = function (player, otherPlayer) {
 }
 
 Ball.prototype.checkWallCollision = function (hexagon, players) {
-  var cx = this.x
-  var cy = this.y
-  var angle = 3
-  var polygon = hexagon.polygon
-
-  var ballVector = Vec2([cx, cy]).add(Vec2([this.radius, 0]).rotate(this.direction * (Math.PI / 180)))
-
-  if (!insidePolygon(ballVector.toArray(), polygon)) {
+  if (!insidePolygon(getDirectionAsArray(this), hexagon.polygon)) {
     this.moveBack()
 
-    if (insidePolygon(ballVector.toArray(), [polygon[0], [polygon[0][0], polygon[1][1]], polygon[1]])) {
-      angle = 30
+    this.direction = reflect(this.direction, getAngle(findCollisionLine(this, hexagon.polygon)))
+      
+    function reflect(incomingAngle, surfaceAngle) {
+      return (360 - incomingAngle + 2 * surfaceAngle) % 360
     }
-    if (insidePolygon(ballVector.toArray(), [polygon[1], [polygon[1][0], polygon[1][1] + 10], [polygon[2][0], polygon[2][1] + 10], polygon[2]])) {
-      angle = 90
+    
+    function getAngle([cornerA, cornerB]) {
+      return rad2deg(Math.atan2(cornerA[1] - cornerB[1], cornerA[0] - cornerB[0]))
     }
-    if (insidePolygon(ballVector.toArray(), [polygon[2], [polygon[3][0], polygon[2][1]], polygon[3]])) {
-      angle = 150
-    }
-    if (insidePolygon(ballVector.toArray(), [polygon[3], [polygon[3][0], polygon[4][1]], polygon[4]])) {
-      angle = 210
-    }
-    if (insidePolygon(ballVector.toArray(), [polygon[4], [polygon[4][0], polygon[4][1] - 10], [polygon[5][0], polygon[5][1] - 10], polygon[5]])) {
-      angle = 270
-    }
-    if (insidePolygon(ballVector.toArray(), [polygon[5], [polygon[0][0], polygon[5][1]], polygon[0]])) {
-      angle = 330
+    
+    function findCollisionLine(ball, polygon) {
+      return polygon
+        .map(cornerToLine)
+        .reduce(getLineCloserTo(ball))
+
+      function cornerToLine(corner, index) {
+        return [corner, hexagon.polygon[(index + 1) % hexagon.polygon.length]]
+      }
+
+      function getLineCloserTo(ball) {
+        return (line, otherLine) => 
+          isLineCloserToPointThanOther(getDirectionAsArray(ball), line, otherLine) ?
+            line :
+            otherLine
+      }
+    
+      function isLineCloserToPointThanOther(point, line, otherLine) {
+        return accumulatedDistanceToLineEnds(point, line) <= accumulatedDistanceToLineEnds(point, otherLine)
+      }
+    
+      function accumulatedDistanceToLineEnds(a, line) {
+        return distance(a, line[0]) + distance(a, line[1])
+      }
+    
+      function distance(a, b) {
+        return Math.sqrt((a[0]-b[0])**2 + (a[1]-b[1])**2);
+      }
     }
 
     players.forEach(function (player) {
@@ -244,9 +294,6 @@ Ball.prototype.checkWallCollision = function (hexagon, players) {
         hexagon.hitTime = 15
       }
     })
-
-    this.direction = 180 - this.direction + 2 * angle
-    this.direction = this.direction % 360
   }
 }
 
@@ -267,8 +314,7 @@ Ball.prototype.draw = function (c) {
     c.beginPath()
     c.fillStyle = color.rgbString()
     c.arc(p[0], p[1], radius, 0, 2 * Math.PI, false)
-    // radius *= 0.95
-    radius = (-Math.exp((tail.length - i) / tail.length) + 3)
+    radius = (-Math.exp((tail.length - i) / tail.length) + this.radius + 1)
 
     color.clearer(0.018)
     c.fill()
@@ -278,13 +324,19 @@ Ball.prototype.draw = function (c) {
 // c.restore()
 }
 
-},{"./helper/deg2rad.js":5,"point-in-polygon":21,"vec2":27}],3:[function(require,module,exports){
+function getDirectionAsArray({x, y, radius, direction}) {
+  return Vec2([x, y])
+    .add(Vec2([radius, 0])
+    .rotate(direction * (Math.PI / 180)))
+    .toArray()
+}
+},{"./helper/deg2rad.js":5,"./helper/rad2deg.js":7,"point-in-polygon":22,"vec2":29}],3:[function(require,module,exports){
 module.exports = Circle
 
-function Circle (x, y) {
+function Circle (x, y, radius) {
   this.x = x || 200
   this.y = y || 200
-  this.radius = 150
+  this.radius = radius || 150
 }
 
 Circle.prototype.draw = function (c) {
@@ -347,7 +399,7 @@ ColorScheme.prototype.rotate = function (time) {
   }.bind(this), time || 150)
 }
 
-},{"color":14}],5:[function(require,module,exports){
+},{"color":15}],5:[function(require,module,exports){
 function deg2rad (deg) {
   return deg * (Math.PI / 180)
 }
@@ -366,7 +418,17 @@ function drawPolygon (c, polygon) {
 module.exports = drawPolygon
 
 },{}],7:[function(require,module,exports){
+function rad2deg (rad) {
+    return 180 * rad / Math.PI
+  }
+  
+  module.exports = rad2deg
+  
+},{}],8:[function(require,module,exports){
 var drawPolygon = require('./helper/drawpolygon.js')
+let rad2deg = require('./helper/rad2deg.js')
+
+const ROTATION_RATE_IN_DEG =  0.00005
 
 module.exports = Hexagon
 
@@ -378,8 +440,9 @@ function Hexagon (baseColor, x, y, radius) {
   this.radius = radius
   this.x = x
   this.y = y
+  this.rotation = 0
   for (var i = 0; i < 6; i++)
-    this.polygon.push([this.radius * Math.cos(i * 1 / 3 * Math.PI) + x, this.radius * Math.sin(i * 1 / 3 * Math.PI) + y])
+    this.polygon.push(calculateCornerPosition(i, this))
 }
 
 Hexagon.prototype.update = function () {
@@ -387,6 +450,11 @@ Hexagon.prototype.update = function () {
   if (this.hitTime === 0) {
     this.color = this.baseColor
   }
+
+  this.rotation = (this.rotation + ROTATION_RATE_IN_DEG) % 360
+
+  this.polygon = this.polygon
+    .map((_, i) => calculateCornerPosition(i, this))
 }
 
 Hexagon.prototype.draw = function (c) {
@@ -394,21 +462,29 @@ Hexagon.prototype.draw = function (c) {
   c.beginPath()
   drawPolygon(c, this.polygon)
   c.strokeStyle = this.color.rgbString()
-  c.lineWidth = 5
+  c.lineWidth = this.radius / 40
   c.stroke()
   c.closePath()
   c.restore()
 }
 
-},{"./helper/drawpolygon.js":6}],8:[function(require,module,exports){
+function calculateCornerPosition(index, hexagon) {
+  return [
+    hexagon.radius * Math.cos(index * 1 / 3 * Math.PI + rad2deg(hexagon.rotation)) + hexagon.x,
+    hexagon.radius * Math.sin(index * 1 / 3 * Math.PI + rad2deg(hexagon.rotation)) + hexagon.y
+  ]
+}
+
+},{"./helper/drawpolygon.js":6,"./helper/rad2deg.js":7}],9:[function(require,module,exports){
 module.exports = Menu
 
-function Menu (game, x, y) {
+function Menu (game, x, y, size) {
   this.items = ['1 Player', '2 Player']
   this.selected = 0
   this.x = x
   this.y = y
   this.frame = 0
+  this.size = size || 48
   this.game = game
 }
 Menu.prototype.update = function () {
@@ -416,13 +492,21 @@ Menu.prototype.update = function () {
   if (this.frame >= 100) this.frame = 0
 }
 Menu.prototype.draw = function (c) {
-  this.items.forEach(function (item, i) {
-    c.fillStyle = (i === this.selected ? this.selectedColor : this.color).rgbString()
-    var size = i === this.selected ? (Math.sin(this.frame * (Math.PI / 50)) - 0.5) * 3 + 48 : 48
-    c.font = size + "px 'Open Sans', sans-serif"
-    var text = c.measureText(item)
-    c.fillText(item, this.x - text.width / 2, this.y + i * 80 - 20)
-  }.bind(this))
+  if(isMobile()) {
+    let text = 'Tap to start'
+    c.fillStyle = this.color.rgbString()
+    c.font = this.size + "px 'Open Sans', sans-serif"
+    let textMeasurements = c.measureText(text)
+    c.fillText(text, this.x - textMeasurements.width / 2, this.y)
+  } else {
+    this.items.forEach(function (item, i) {
+      c.fillStyle = (i === this.selected ? this.selectedColor : this.color).rgbString()
+      var fontSize = i === this.selected ? (Math.sin(this.frame * (Math.PI / 50)) - 0.5) * 3 + this.size : this.size
+      c.font = fontSize + "px 'Open Sans', sans-serif"
+      var text = c.measureText(item)
+      c.fillText(item, this.x - text.width / 2, this.y + i * this.size * 2 - this.size/2)
+    }.bind(this))
+  }
 }
 Menu.prototype.up = function () {
   this.selected--
@@ -437,18 +521,23 @@ Menu.prototype.select = function () {
   this.game.init(this.selected + 1)
 }
 
-},{}],9:[function(require,module,exports){
+function isMobile() {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+ }
+
+},{}],10:[function(require,module,exports){
 var deg2rad = require('./helper/deg2rad.js')
 
 module.exports = Player
 
-function Player () {
-  this.width = 4
-  this.height = 40
+function Player (width, height) {
+  this.width = width || 4
+  this.height = height || 40
   this.active = false
   this.id = 1
   this.bot = false
   this.circle = null
+  this.input = 'stay'
   this.init()
 }
 Player.prototype.init = function () {
@@ -486,9 +575,13 @@ Player.prototype.update = function (circle, ball) {
       }
     }
   } else {
-    if (this.arrows.isDown('left')) this.angle += 2
-    if (this.arrows.isDown('right')) this.angle -= 2
+    if (this.arrows.isDown('left')) this.input = 'left'
+    else if (this.arrows.isDown('right')) this.input = 'right'
+    else this.input = 'stay'
+    if(this.input === 'left') this.angle += 2
+    if(this.input === 'right') this.angle -= 2
   }
+
 
   this.angle = this.angle % 360
 
@@ -513,9 +606,9 @@ Player.prototype.draw = function (c) {
   // score
   if (!this.hideScore) {
     c.fillStyle = this.color.rgbString()
-    c.font = "48px 'Open Sans', sans-serif" // '48px Verdana, Geneva, sans-serif'
+    c.font = this.circle.radius / 3  +"px 'Open Sans', sans-serif" // '48px Verdana, Geneva, sans-serif'
     var p = this.circle.getCoordinates(this.id * 180)
-    c.fillText(this.score, p.x - 14 , p.y - 130)
+    c.fillText(this.score, p.x - this.circle.radius /10 , p.y - this.circle.radius)
   }
 }
 
@@ -525,7 +618,7 @@ function distance (p1, p2) {
   return Math.sqrt(Math.pow((p1.x - p2.x), 2) + Math.pow((p1.y - p2.y), 2))
 }
 
-},{"./helper/deg2rad.js":5}],10:[function(require,module,exports){
+},{"./helper/deg2rad.js":5}],11:[function(require,module,exports){
 /* MIT license */
 
 module.exports = {
@@ -1225,7 +1318,7 @@ for (var key in cssKeywords) {
   reverseKeywords[JSON.stringify(cssKeywords[key])] = key;
 }
 
-},{}],11:[function(require,module,exports){
+},{}],12:[function(require,module,exports){
 var conversions = require("./conversions");
 
 var convert = function() {
@@ -1318,7 +1411,9 @@ Converter.prototype.getValues = function(space) {
 });
 
 module.exports = convert;
-},{"./conversions":10}],12:[function(require,module,exports){
+},{"./conversions":11}],13:[function(require,module,exports){
+'use strict'
+
 module.exports = {
 	"aliceblue": [240, 248, 255],
 	"antiquewhite": [250, 235, 215],
@@ -1469,7 +1564,8 @@ module.exports = {
 	"yellow": [255, 255, 0],
 	"yellowgreen": [154, 205, 50]
 };
-},{}],13:[function(require,module,exports){
+
+},{}],14:[function(require,module,exports){
 /* MIT license */
 var colorNames = require('color-name');
 
@@ -1692,7 +1788,7 @@ for (var name in colorNames) {
    reverseNames[colorNames[name]] = name;
 }
 
-},{"color-name":12}],14:[function(require,module,exports){
+},{"color-name":13}],15:[function(require,module,exports){
 /* MIT license */
 var convert = require("color-convert"),
     string = require("color-string");
@@ -2127,7 +2223,7 @@ Color.prototype.setChannel = function(space, index, val) {
 
 module.exports = Color;
 
-},{"color-convert":11,"color-string":13}],15:[function(require,module,exports){
+},{"color-convert":12,"color-string":14}],16:[function(require,module,exports){
 var EventEmitter = require('events').EventEmitter;
 var inherits = require('inherits');
 
@@ -2213,7 +2309,7 @@ Arrows.prototype.useWASD = function () {
   this.setArrowKeyCodes(65, 68, 87, 83);
 }
 
-},{"events":18,"inherits":19}],16:[function(require,module,exports){
+},{"events":19,"inherits":20}],17:[function(require,module,exports){
 var EventEmitter = require('events').EventEmitter;
 var requestAnimationFrame = require('raf-stream');
 var inherits = require('inherits');
@@ -2305,7 +2401,7 @@ Game.prototype.drawAllLayers = function(){
     this.emit('draw', this.context);
   }
 }
-},{"events":18,"inherits":19,"raf-stream":23,"util":26}],17:[function(require,module,exports){
+},{"events":19,"inherits":20,"raf-stream":24,"util":28}],18:[function(require,module,exports){
 var EventEmitter = require('events').EventEmitter;
 var inherits = require('inherits');
 var vkey = require('vkey');
@@ -2336,7 +2432,7 @@ Keyboard.prototype.initializeListeners = function(){
     delete self.keysDown[vkey[e.keyCode]];
   }, false);
 };
-},{"events":18,"inherits":19,"vkey":28}],18:[function(require,module,exports){
+},{"events":19,"inherits":20,"vkey":30}],19:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -2639,7 +2735,7 @@ function isUndefined(arg) {
   return arg === void 0;
 }
 
-},{}],19:[function(require,module,exports){
+},{}],20:[function(require,module,exports){
 if (typeof Object.create === 'function') {
   // implementation from standard node.js 'util' module
   module.exports = function inherits(ctor, superCtor) {
@@ -2664,7 +2760,7 @@ if (typeof Object.create === 'function') {
   }
 }
 
-},{}],20:[function(require,module,exports){
+},{}],21:[function(require,module,exports){
 (function (process){
 // Generated by CoffeeScript 1.6.3
 (function() {
@@ -2704,7 +2800,7 @@ if (typeof Object.create === 'function') {
 */
 
 }).call(this,require('_process'))
-},{"_process":22}],21:[function(require,module,exports){
+},{"_process":23}],22:[function(require,module,exports){
 module.exports = function (point, vs) {
     // ray-casting algorithm based on
     // http://www.ecse.rpi.edu/Homepages/wrf/Research/Short_Notes/pnpoly.html
@@ -2724,7 +2820,7 @@ module.exports = function (point, vs) {
     return inside;
 };
 
-},{}],22:[function(require,module,exports){
+},{}],23:[function(require,module,exports){
 // shim for using process in browser
 
 var process = module.exports = {};
@@ -2784,7 +2880,7 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-},{}],23:[function(require,module,exports){
+},{}],24:[function(require,module,exports){
 var EE = require('events').EventEmitter
   , raf = require('raf')
 
@@ -2835,7 +2931,7 @@ module.exports = function(el, tick) {
   }
 }
 
-},{"events":18,"raf":24}],24:[function(require,module,exports){
+},{"events":19,"raf":25}],25:[function(require,module,exports){
 var now = require('performance-now')
   , global = typeof window === 'undefined' ? {} : window
   , vendors = ['ms', 'moz', 'webkit', 'o']
@@ -2902,14 +2998,16 @@ module.exports.cancel = function() {
   caf.apply(global, arguments)
 }
 
-},{"performance-now":20}],25:[function(require,module,exports){
+},{"performance-now":21}],26:[function(require,module,exports){
+arguments[4][20][0].apply(exports,arguments)
+},{"dup":20}],27:[function(require,module,exports){
 module.exports = function isBuffer(arg) {
   return arg && typeof arg === 'object'
     && typeof arg.copy === 'function'
     && typeof arg.fill === 'function'
     && typeof arg.readUInt8 === 'function';
 }
-},{}],26:[function(require,module,exports){
+},{}],28:[function(require,module,exports){
 (function (process,global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -3499,7 +3597,7 @@ function hasOwnProperty(obj, prop) {
 }
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./support/isBuffer":25,"_process":22,"inherits":19}],27:[function(require,module,exports){
+},{"./support/isBuffer":27,"_process":23,"inherits":26}],29:[function(require,module,exports){
 ;(function inject(clean, precision, undef) {
 
   var isArray = function (a) {
@@ -3974,7 +4072,7 @@ function hasOwnProperty(obj, prop) {
   return Vec2;
 })();
 
-},{}],28:[function(require,module,exports){
+},{}],30:[function(require,module,exports){
 var ua = typeof window !== 'undefined' ? window.navigator.userAgent : ''
   , isOSX = /OS X/.test(ua)
   , isOpera = /Opera/.test(ua)
