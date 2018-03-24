@@ -188,7 +188,12 @@ Ball.prototype.reset = function () {
 }
 Ball.prototype.update = function () {
   var diff = 0.0009
-  this.tail.push([this.x * (1 - diff + Math.random() * diff * 2), this.y * (1 - diff + Math.random() * diff * 2)])
+  this.tail.push(
+    {
+      x: this.x * (1 - diff + Math.random() * diff * 2),
+      y: this.y * (1 - diff + Math.random() * diff * 2),
+      color: this.color.clone()
+    })
   if (this.tail.length > 20) this.tail.shift()
   var p = this.moveVector(this.direction)
   this.x += p.x
@@ -294,31 +299,40 @@ Ball.prototype.checkWallCollision = function (hexagon, players) {
   }
 }
 
-Ball.prototype.draw = function (c) {
-  var radius = this.radius
-  var color = this.color.clone()
-  c.beginPath()
-  c.fillStyle = color.rgbString()
-  c.arc(this.x, this.y, radius, 0, 2 * Math.PI, false)
-  c.fill()
-  c.closePath()
+Ball.prototype.draw = function (ctx) {
+  drawBall(ctx, this)
 
-  // color.clearer(0.75)
-  var tail = this.tail
+  drawTail(ctx, this.tail, this.radius)
+}
 
-  for (var i = tail.length - 1; i >= 0; i--) {
-    var p = tail[i]
-    c.beginPath()
-    c.fillStyle = color.rgbString()
-    c.arc(p[0], p[1], radius, 0, 2 * Math.PI, false)
-    radius = (-Math.exp((tail.length - i) / tail.length) + this.radius + 1)
+function drawBall(ctx, ball) {
+  ctx.fillStyle = ball.color.rgbString()
+  
+  ctx.beginPath()
+  ctx.arc(ball.x, ball.y, ball.radius, 0, 2 * Math.PI, false)
+  ctx.fill()
+  ctx.closePath()
+}
 
-    color.clearer(0.018)
-    c.fill()
-    c.closePath()
-  }
+function drawTail(ctx, tail, ballRadius) {
+  tail.forEach((part, i) => {
+    part.color.clearer(1/tail.length)
+    ctx.fillStyle = part.color.rgbString() 
 
-// c.restore()
+    ctx.beginPath()
+    ctx.arc(
+      part.x,
+      part.y, calculatePartRadius(i, tail.length, ballRadius),
+      0,
+      2 * Math.PI,
+      false)
+    ctx.fill()
+    ctx.closePath()
+  })
+}
+
+function calculatePartRadius(index, tailLength, ballRadius) {
+  return (-Math.exp((tailLength - index) / tailLength) + ballRadius + 1)
 }
 
 function getDirectionAsArray({x, y, radius, direction}) {
